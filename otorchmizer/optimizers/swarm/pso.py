@@ -78,11 +78,12 @@ class PSO(Optimizer):
 
     def compile(self, population: Population) -> None:
         dev = population.device
+        dt = getattr(population, 'dtype', torch.float32)
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
 
-        self.local_position = torch.zeros(shape, device=dev)
-        self.local_fitness = torch.full((population.n_agents,), c.FLOAT_MAX, device=dev)
-        self.velocity = torch.zeros(shape, device=dev)
+        self.local_position = torch.zeros(shape, device=dev, dtype=dt)
+        self.local_fitness = torch.full((population.n_agents,), c.FLOAT_MAX, device=dev, dtype=dt)
+        self.velocity = torch.zeros(shape, device=dev, dtype=dt)
 
     def evaluate(self, population: Population, function: Function) -> None:
         """Custom evaluate with local-best tracking — vectorized."""
