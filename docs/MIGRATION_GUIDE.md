@@ -41,6 +41,7 @@ def sphere(x):
 space = Space(n_agents=20, n_variables=5,
               lower_bound=[-5]*5, upper_bound=[5]*5,
               device="auto")  # ← "auto" picks GPU if available
+space.build()
 
 optimizer = PSO()
 function = Function(sphere)
