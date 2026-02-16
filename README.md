@@ -6,16 +6,17 @@
 
 ## Welcome to Otorchmizer.
 
-Did you ever reach a bottleneck in your computational experiments? Are you tired of selecting suitable parameters for a chosen technique? If yes, Otorchmizer is the real deal! This package provides an easy-to-go implementation of meta-heuristic optimizations — powered by PyTorch for GPU-accelerated performance. From populations to search spaces, from internal functions to external communication, we will foster all research related to optimizing stuff.
+Did you ever reach a bottleneck in your computational experiments? Are you tired of waiting hours for meta-heuristic optimization runs? If yes, Otorchmizer is the real deal! This package provides an easy-to-go implementation of **91 meta-heuristic optimization algorithms** — all powered by PyTorch tensors for GPU-accelerated performance. From populations to search spaces, from internal functions to external communication, we will foster all research related to optimizing stuff.
 
-Otorchmizer is the modernized successor to [Opytimizer](https://github.com/gugarosa/opytimizer), replacing NumPy with PyTorch tensors for **orders-of-magnitude speedups** on both CPU and GPU.
+Otorchmizer is the modernized successor to [Opytimizer](https://github.com/gugarosa/opytimizer), delivering **up to 2,311× speedup** by replacing NumPy with PyTorch.
 
 Use Otorchmizer if you need a library or wish to:
-* Create your optimization algorithm with GPU support;
-* Design or use pre-loaded optimization tasks;
-* Leverage PyTorch tensors for 50–2,300× speedups over NumPy;
+* Create your optimization algorithm with automatic GPU support;
+* Design or use pre-loaded optimization tasks at scale;
+* Run the same code on CPU, single-GPU, or multi-GPU seamlessly;
+* Leverage `torch.compile` and CUDA Graphs for maximum throughput;
 * Mix-and-match different strategies to solve your problem;
-* Because it is fun to optimize things.
+* Because it is fun to optimize things — even faster.
 
 Otorchmizer is compatible with: **Python 3.10+** and **PyTorch 2.0+**.
 
@@ -31,9 +32,26 @@ Otorchmizer is compatible with: **Python 3.10+** and **PyTorch 2.0+**.
 
 ---
 
+## Citation
+
+If you use Otorchmizer to fulfill any of your needs, please cite the original Opytimizer paper:
+
+```BibTex
+@misc{rosa2019opytimizer,
+    title={Opytimizer: A Nature-Inspired Python Optimizer},
+    author={Gustavo H. de Rosa, Douglas Rodrigues and João P. Papa},
+    year={2019},
+    eprint={1912.13002},
+    archivePrefix={arXiv},
+    primaryClass={cs.NE}
+}
+```
+
+---
+
 ## Getting started: 60 seconds with Otorchmizer
 
-First of all. We have examples. Yes, they are commented. Just browse to `examples/`, chose your subpackage, and follow the example. We have high-level examples for most tasks we could think of.
+First of all. We have examples. Yes, they are commented. Just browse to `examples/`, chose your subpackage, and follow the example. We have high-level examples for most tasks we could think of, including GPU acceleration, `torch.compile`, and multi-GPU population splitting.
 
 Alternatively, if you wish to learn even more, please take a minute:
 
@@ -59,13 +77,13 @@ Otorchmizer is based on the following structure, and you should pay attention to
         - hyper
         - random
     - optimizers
-        - boolean     #  3 algorithms (BMRFO, BPSO, UMDA)
-        - evolutionary # 14 algorithms (GA, DE, EP, ES, HS variants, etc.)
-        - misc        #  5 algorithms (HC, GS, AOA, CEM, DOA)
-        - population  # 11 algorithms (GWO, HHO, AEO, etc.)
-        - science     # 19 algorithms (SA, GSA, BH, EO, etc.)
-        - social      #  6 algorithms (BSO, CI, ISA, QSA, etc.)
-        - swarm       # 33 algorithms (PSO variants, WOA, FA, ABC, etc.)
+        - boolean
+        - evolutionary
+        - misc
+        - population
+        - science
+        - social
+        - swarm
     - spaces
         - boolean
         - graph
@@ -87,19 +105,19 @@ Otorchmizer is based on the following structure, and you should pay attention to
 
 ### Core
 
-Core is the core. Essentially, it is the parent of everything. You should find parent classes defining the basis of our structure. The key innovation is **Population** — all agent data stored as contiguous PyTorch tensors `(n_agents, n_variables, n_dimensions)` enabling GPU parallelism.
+Core is the core. Essentially, it is the parent of everything. You should find parent classes defining the basis of our structure. They should provide variables and methods that will help to construct other modules. The key innovation is the **Population** class, which stores all agent data as contiguous PyTorch tensors `(n_agents, n_variables, n_dimensions)`, enabling vectorized operations and GPU parallelism. Also featured here is the **DeviceManager**, which handles CPU/GPU/multi-GPU resolution, mixed-precision, and CUDA Graph capture.
 
 ### Functions
 
-Instead of using raw and straightforward functions, why not try this module? Compose high-level abstract functions or even new function-based ideas in order to solve your problems. Functions are auto-vectorized across the population via `torch.vmap`.
+Instead of using raw and straightforward functions, why not try this module? Compose high-level abstract functions or even new function-based ideas in order to solve your problems. Functions are auto-vectorized across the entire population via `torch.vmap` — you write a single-agent function, and we handle the batching.
 
 ### Math
 
-Just because we are computing stuff does not means that we do not need math. Math is the mathematical package containing low-level math implementations. From random numbers to distribution generation, you can find your needs on this module — all implemented with PyTorch tensors.
+Just because we are computing stuff does not mean that we do not need math. Math is the mathematical package containing low-level math implementations. From random numbers to distribution generation, you can find your needs on this module — all backed by PyTorch tensors for device-agnostic computation.
 
 ### Optimizers
 
-This is why we are called Otorchmizer. This is the heart of heuristics, where you can find **91 meta-heuristic optimization techniques** across 7 families. All algorithms use batched tensor operations for GPU-ready performance.
+This is why we are called Otorchmizer. This is the heart of heuristics, where you can find **91 meta-heuristic optimization techniques** across 7 families — swarm intelligence, evolutionary algorithms, science-inspired methods, and more. Every algorithm uses batched tensor operations, meaning the same code runs on CPU and GPU without modification.
 
 ### Spaces
 
@@ -123,7 +141,27 @@ We believe that everything has to be easy. Not tricky or daunting, Otorchmizer w
 pip install -e .
 ```
 
-For GPU support, install PyTorch with CUDA:
+---
+
+## Environment configuration
+
+Note that sometimes, there is a need for additional implementation. If needed, from here, you will be the one to know all of its details.
+
+### Ubuntu
+
+No specific additional commands are needed.
+
+### Windows
+
+No specific additional commands are needed.
+
+### MacOS
+
+No specific additional commands are needed.
+
+### GPU Support
+
+For GPU acceleration, install PyTorch with CUDA support:
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
@@ -153,36 +191,55 @@ upper_bound = [10, 10]
 space = Space(n_agents=n_agents, n_variables=n_variables,
               lower_bound=lower_bound, upper_bound=upper_bound)
 space.build()
+
 optimizer = PSO()
 function = Function(sphere)
 
 opt = Otorchmizer(space, optimizer, function)
 opt.start(n_iterations=1000)
-
-print(f"Best fitness: {space.population.best_fitness.item():.6e}")
 ```
 
-### GPU Usage
+---
+
+## GPU Usage
+
+Running on GPU requires only a single parameter change — all algorithms, spaces, and functions work identically:
 
 ```python
-# Automatically uses GPU if available
+# Automatically uses GPU if available, otherwise falls back to CPU
 space = Space(n_agents=1000, n_variables=100,
               lower_bound=-10.0, upper_bound=10.0,
-              device="auto")  # "cpu", "cuda:0", or "auto"
+              device="auto")
 space.build()
 ```
 
-### torch.compile Acceleration
+For even more performance, enable `torch.compile` JIT acceleration:
 
 ```python
 optimizer = PSO()
 optimizer.compile(space.population)
 optimizer.torch_compile(mode="reduce-overhead")
-
-# Subsequent updates run through compiled graph
-opt = Otorchmizer(space, optimizer, function)
-opt.start(n_iterations=1000)
 ```
+
+---
+
+## Why Otorchmizer over Opytimizer?
+
+Otorchmizer is a drop-in modernization of Opytimizer. The same algorithms, the same API style, but with a fundamentally different computational engine:
+
+| | Opytimizer | Otorchmizer |
+|---|---|---|
+| **Backend** | NumPy | PyTorch |
+| **Agent storage** | `List[Agent]` (Python objects) | `Population` tensor `(n, v, d)` |
+| **Update loop** | `for agent in agents:` (Python) | Batched tensor ops (vectorized) |
+| **GPU support** | ❌ None | ✅ CUDA, multi-GPU, CUDA Graphs |
+| **Mixed precision** | ❌ float64 only | ✅ float16, bfloat16, float32, float64 |
+| **JIT compilation** | ❌ None | ✅ `torch.compile` |
+| **Algorithms** | 92 | 91 (3 specialized deferred) |
+| **CPU speedup** | 1× (baseline) | **50–1,055×** |
+| **GPU speedup** | — | **up to 2,311×** |
+
+For a detailed migration guide, see [`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_GUIDE.md).
 
 ---
 
@@ -202,43 +259,31 @@ opt.start(n_iterations=1000)
 
 ## Benchmarks
 
-### Key Results
+Results from 432 paired configurations across 3 backends (NumPy, PyTorch CPU, PyTorch GPU on an NVIDIA RTX 4070):
 
 | Metric | Value |
 |--------|-------|
-| Average CPU speedup | **173×** across 432 configurations |
-| Peak CPU speedup | **1,055×** (GA, 1000 agents, 100 dimensions) |
-| Average GPU speedup | **169×** across 432 configurations |
-| Peak GPU speedup | **2,311×** (HC, 1000 agents, 100 dims, RTX 4070) |
+| Average CPU speedup | **173×** |
+| Peak CPU speedup | **1,055×** (GA, 1000 agents, 100 dims) |
+| Average GPU speedup | **169×** |
+| Peak GPU speedup | **2,311×** (HC, 1000 agents, 100 dims) |
 | Convergence quality | Parity with original |
-| Tests | 197 passing |
 
-GPU execution time stays **nearly constant** (~0.03–0.08s) regardless of problem size.
-
-### Running Benchmarks
+GPU execution time stays **nearly constant** (~0.03–0.08s) regardless of problem size, while NumPy grows linearly.
 
 ```bash
 # Quick CPU-only benchmarks
 python report/benchmarks/run_benchmarks.py --quick
 
-# Extended benchmarks with GPU
+# Full benchmark suite with GPU
 python report/benchmarks/run_benchmarks.py --extended --gpu
 
-# Generate plots
-python report/benchmarks/plot_results.py --input report/benchmarks/results_extended.json --outdir report/benchmarks/plots_extended
+# Generate all 13 visualization plots
+python report/benchmarks/plot_results.py --input report/benchmarks/results_extended.json \
+    --outdir report/benchmarks/plots_extended
 ```
 
-See the full [Migration Report](report/REPORT.md) for detailed analysis and all 13 benchmark plots.
-
----
-
-## Documentation
-
-- **[Migration Guide](docs/MIGRATION_GUIDE.md)** — For existing Opytimizer users
-- **[Architecture Guide](ARCHITECTURE.md)** — Full design document
-- **[Migration Report](report/REPORT.md)** — Detailed performance analysis with 13 plots
-- **[API Reference](docs/)** — Sphinx auto-generated docs (run `cd docs && make html`)
-- **[Examples](examples/)** — Commented examples for all modules
+See the full [Migration Report](report/REPORT.md) for detailed analysis, tables, and all 13 benchmark plots.
 
 ---
 
@@ -251,24 +296,15 @@ python -m pytest tests/ -v
 
 ---
 
-## Project Structure
+## Documentation
 
-```
-otorchmizer/
-├── otorchmizer/           # Main package
-│   ├── core/              # Population, Space, Optimizer, Function, DeviceManager
-│   ├── math/              # random, distribution, general, hyper
-│   ├── optimizers/        # 91 algorithms across 7 families
-│   ├── spaces/            # search, boolean, grid, tree, ...
-│   ├── utils/             # constant, exception, logging, history, callback
-│   ├── visualization/     # convergence, surface
-│   └── otorchmizer.py     # Orchestrator pipeline
-├── tests/                 # 197 tests (unit + integration + regression)
-├── docs/                  # Sphinx API docs + migration guide
-├── examples/              # Commented examples for all modules
-├── report/                # Migration report with embedded benchmark figures
-└── ARCHITECTURE.md        # Design document
-```
+| Resource | Description |
+|----------|-------------|
+| [Migration Guide](docs/MIGRATION_GUIDE.md) | For existing Opytimizer users — API mapping, code examples, FAQ |
+| [Architecture Guide](ARCHITECTURE.md) | Full design document covering Population, UpdateContext, DeviceManager |
+| [Migration Report](report/REPORT.md) | Detailed performance analysis with 13 benchmark plots |
+| [API Reference](docs/) | Sphinx auto-generated docs (`cd docs && make html`) |
+| [Examples](examples/) | Commented examples for core, optimizers, applications, GPU, and math |
 
 ---
 
