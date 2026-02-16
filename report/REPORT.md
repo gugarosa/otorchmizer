@@ -669,57 +669,57 @@ All plots generated from 432 benchmark configurations across 3 backends (NumPy, 
 
 **Speedup by Algorithm**
 
-![Speedup Bars](figures/01_speedup_bars.png)
+![Speedup Bars](benchmarks/plots_extended/01_speedup_bars.png)
 
 **Speedup Scaling with Population Size**
 
-![Scaling Population](figures/02_scaling_population.png)
+![Scaling Population](benchmarks/plots_extended/02_scaling_population.png)
 
 **Speedup Scaling with Dimensionality**
 
-![Scaling Dimensions](figures/03_scaling_dimensions.png)
+![Scaling Dimensions](benchmarks/plots_extended/03_scaling_dimensions.png)
 
 **Convergence Quality (NumPy vs PyTorch)**
 
-![Quality Scatter](figures/04_quality_scatter.png)
+![Quality Scatter](benchmarks/plots_extended/04_quality_scatter.png)
 
 **Memory Usage Comparison**
 
-![Memory Usage](figures/05_memory_usage.png)
+![Memory Usage](benchmarks/plots_extended/05_memory_usage.png)
 
 **Speedup Heatmap (Optimizer × Population)**
 
-![Speedup Heatmap](figures/06_speedup_heatmap.png)
+![Speedup Heatmap](benchmarks/plots_extended/06_speedup_heatmap.png)
 
 **Absolute Execution Time by Function**
 
-![Time Comparison](figures/07_time_comparison.png)
+![Time Comparison](benchmarks/plots_extended/07_time_comparison.png)
 
 **CPU Dashboard**
 
-![CPU Dashboard](figures/08_dashboard.png)
+![CPU Dashboard](benchmarks/plots_extended/08_dashboard.png)
 
 #### GPU Acceleration
 
 **CPU vs GPU Speedup Comparison**
 
-![GPU vs CPU Bars](figures/09_gpu_vs_cpu_bars.png)
+![GPU vs CPU Bars](benchmarks/plots_extended/09_gpu_vs_cpu_bars.png)
 
 **CPU/GPU Scaling with Population Size**
 
-![GPU Scaling](figures/10_gpu_scaling.png)
+![GPU Scaling](benchmarks/plots_extended/10_gpu_scaling.png)
 
 **CPU vs GPU Speedup Heatmaps**
 
-![3-Backend Heatmap](figures/11_3backend_heatmap.png)
+![3-Backend Heatmap](benchmarks/plots_extended/11_3backend_heatmap.png)
 
 **Execution Time Invariance (GPU stays flat)**
 
-![GPU Time Invariance](figures/12_gpu_time_invariance.png)
+![GPU Time Invariance](benchmarks/plots_extended/12_gpu_time_invariance.png)
 
 **GPU Acceleration Dashboard**
 
-![GPU Dashboard](figures/13_gpu_dashboard.png)
+![GPU Dashboard](benchmarks/plots_extended/13_gpu_dashboard.png)
 
 ### 12.2 File Inventory
 
@@ -766,13 +766,13 @@ python -m pytest tests/ -v
 
 # Run benchmarks (requires opytimizer in ../opytimizer)
 # Quick (CPU-only, small configs):
-python benchmarks/run_benchmarks.py --quick
+python report/benchmarks/run_benchmarks.py --quick
 
 # Extended (CPU + GPU, large configs):
-python benchmarks/run_benchmarks.py --extended --gpu
+python report/benchmarks/run_benchmarks.py --extended --gpu
 
 # Generate plots
-python benchmarks/plot_results.py --input benchmarks/results_extended.json --outdir benchmarks/plots_extended
+python report/benchmarks/plot_results.py --input report/benchmarks/results_extended.json --outdir report/benchmarks/plots_extended
 ```
 
 ---

@@ -99,13 +99,13 @@ Run the benchmarking suite:
 
 ```bash
 # Quick CPU-only benchmarks
-python benchmarks/run_benchmarks.py --quick
+python report/benchmarks/run_benchmarks.py --quick
 
 # Extended benchmarks with GPU
-python benchmarks/run_benchmarks.py --extended --gpu
+python report/benchmarks/run_benchmarks.py --extended --gpu
 
 # Generate plots
-python benchmarks/plot_results.py --input benchmarks/results_extended.json --outdir benchmarks/plots_extended
+python report/benchmarks/plot_results.py --input report/benchmarks/results_extended.json --outdir report/benchmarks/plots_extended
 ```
 
 ### Sample Results (RTX 4070)
@@ -140,7 +140,7 @@ otorchmizer/
 │   ├── visualization/     # convergence, surface
 │   └── otorchmizer.py     # Orchestrator pipeline
 ├── tests/                 # 77 tests (unit + integration + regression)
-├── benchmarks/            # Benchmark harness, results, plots
+├── report/                # Migration report, benchmarks, results, plots
 ├── report/                # Migration report with embedded figures
 └── ARCHITECTURE.md        # Design document
 ```
