@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "otorchmizer"
-version = "0.1.0"
+version = "1.0.0"
 description = "A PyTorch-based library for nature-inspired meta-heuristic optimization"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -12,8 +12,9 @@ requires-python = ">=3.10"
 authors = [
     {name = "Gustavo Rosa", email = "gustavo.rosa@unesp.br"},
 ]
+keywords = ["optimization", "meta-heuristic", "pytorch", "gpu", "nature-inspired"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
@@ -31,6 +32,12 @@ dependencies = [
     "tqdm>=4.60.0",
     "dill>=0.3.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gugarosa/otorchmizer"
+Documentation = "https://otorchmizer.readthedocs.io"
+Repository = "https://github.com/gugarosa/otorchmizer"
+"Bug Tracker" = "https://github.com/gugarosa/otorchmizer/issues"
 
 [project.optional-dependencies]
 dev = [
