@@ -10,6 +10,7 @@ from otorchmizer.optimizers.population.epo import EPO
 from otorchmizer.optimizers.population.gco import GCO
 from otorchmizer.optimizers.population.gwo import GWO
 from otorchmizer.optimizers.population.hho import HHO
+from otorchmizer.optimizers.population.loa import LOA
 from otorchmizer.optimizers.population.osa import OSA
 from otorchmizer.optimizers.population.ppa import PPA
 from otorchmizer.optimizers.population.pvs import PVS
@@ -23,6 +24,7 @@ __all__ = [
     "GCO",
     "GWO",
     "HHO",
+    "LOA",
     "OSA",
     "PPA",
     "PVS",

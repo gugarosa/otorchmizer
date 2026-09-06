@@ -8,5 +8,6 @@ from otorchmizer.optimizers.misc.cem import CEM
 from otorchmizer.optimizers.misc.doa import DOA
 from otorchmizer.optimizers.misc.gs import GS
 from otorchmizer.optimizers.misc.hc import HC
+from otorchmizer.optimizers.misc.nds import NDS
 
-__all__ = ["AOA", "CEM", "DOA", "GS", "HC"]
+__all__ = ["AOA", "CEM", "DOA", "GS", "HC", "NDS"]

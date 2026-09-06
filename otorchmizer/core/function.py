@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 
@@ -34,6 +35,7 @@ class Function:
             Other objective errors propagate without retrying. Objectives should be free of side effects,
             since a rejected vectorized call may execute part of the objective before fallback.
             Native batch callables receive ``(n_agents, n_variables, n_dimensions)`` and must return ``(n_agents,)``.
+            Checkpoints retain the original callable and rebuild transient vectorization wrappers when loaded.
 
         """
 
@@ -51,15 +53,24 @@ class Function:
         else:
             self.name = pointer.__class__.__name__
 
-        if batch:
-            self._fn = pointer
-        else:
-            self._fn = torch.vmap(pointer)
+        self._build_batcher()
 
         self.built = True
 
         logger.debug("Function: %s | Batch: %s | Built: %s.", self.name, batch, self.built)
         logger.info("Class created.")
+
+    def _build_batcher(self) -> None:
+        self._fn = self._raw_pointer if self.batch else torch.vmap(self._raw_pointer)
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = self.__dict__.copy()
+        del state["_fn"]
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._build_batcher()
 
     def _evaluate_individually(self, positions: torch.Tensor) -> torch.Tensor:
         results = []
