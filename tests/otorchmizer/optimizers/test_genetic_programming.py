@@ -8,7 +8,6 @@ import pytest
 import torch
 
 import otorchmizer.optimizers.evolutionary.gp as gp_module
-import otorchmizer.utils.exception as e
 from otorchmizer import Otorchmizer
 from otorchmizer.core import Function, Node, Space, UpdateContext
 from otorchmizer.optimizers.evolutionary import GP, GSGP
@@ -129,9 +128,9 @@ def test_gp_canonical_parameters_and_validation():
     assert configured.p_crossover == 0.5
     assert configured.prunning_ratio == 0.25
 
-    with pytest.raises(e.ValueError, match="p_mutation"):
+    with pytest.raises(ValueError, match="p_mutation"):
         GP({"p_mutation": 1.1})
-    with pytest.raises(e.TypeError, match="p_crossover"):
+    with pytest.raises(TypeError, match="p_crossover"):
         GP({"p_crossover": "invalid"})
 
 
@@ -139,20 +138,20 @@ def test_gsgp_mutation_step_validation():
     assert GSGP().mutation_step == 0.1
     assert GSGP({"mutation_step": 0.25}).mutation_step == 0.25
 
-    with pytest.raises(e.ValueError, match="mutation_step"):
+    with pytest.raises(ValueError, match="mutation_step"):
         GSGP({"mutation_step": -0.1})
 
 
 def test_gsgp_rejects_nonzero_subtree_pruning():
     assert GSGP({"prunning_ratio": 0}).prunning_ratio == 0
 
-    with pytest.raises(e.ValueError, match="complete trees"):
+    with pytest.raises(ValueError, match="complete trees"):
         GSGP({"prunning_ratio": 0.1})
 
     optimizer = GSGP()
-    with pytest.raises(e.ValueError, match="complete trees"):
+    with pytest.raises(ValueError, match="complete trees"):
         optimizer.prunning_ratio = 0.1
-    with pytest.raises(e.ValueError, match="complete trees"):
+    with pytest.raises(ValueError, match="complete trees"):
         optimizer.build({"prunning_ratio": 0.1})
 
 
@@ -169,7 +168,7 @@ def test_tree_space_initializes_positions_from_trees():
 
 
 def test_tree_space_rejects_unsupported_functions():
-    with pytest.raises(e.ValueError, match="functions"):
+    with pytest.raises(ValueError, match="functions"):
         TreeSpace(
             n_agents=2,
             n_variables=1,
@@ -241,7 +240,7 @@ def test_tree_space_still_rejects_integer_tree_phenotypes():
     )
     space.trees = [Node(0, "TERMINAL", torch.tensor([[1]]))]
 
-    with pytest.raises(e.ValueError, match="tree.position.dtype"):
+    with pytest.raises(ValueError, match="tree.position.dtype"):
         space.sync_positions()
 
 
@@ -262,7 +261,7 @@ def test_nonfinite_expression_is_rejected_instead_of_becoming_midpoint():
     assert torch.isfinite(finite_left.position).all()
     assert torch.isfinite(finite_right.position).all()
     assert not torch.isfinite(invalid.position).all()
-    with pytest.raises(e.ValueError, match="finite"):
+    with pytest.raises(ValueError, match="finite"):
         space.sync_positions()
 
 
@@ -526,7 +525,7 @@ def test_tree_optimizer_rejects_position_changing_callbacks(route):
     )
     callback = DiscreteSearchCallback([[0.0, 1.0]]) if route == "evaluate_before" else _PositionMutationCallback(route)
 
-    with pytest.raises(e.ValueError, match="observational callbacks"):
+    with pytest.raises(ValueError, match="observational callbacks"):
         model.start(n_iterations=0 if route == "evaluate_before" else 1, callbacks=[callback])
 
     space.validate_positions()
@@ -538,9 +537,9 @@ def test_gp_requires_explicit_tree_space_binding():
     optimizer = GP()
     function = Function(lambda x: x.square().sum())
 
-    with pytest.raises(e.BuildError, match="bound"):
+    with pytest.raises(RuntimeError, match="bound"):
         optimizer.evaluate(population_space.population, function)
-    with pytest.raises(e.TypeError, match="TreeSpace"):
+    with pytest.raises(TypeError, match="TreeSpace"):
         Otorchmizer(population_space, optimizer, function)
 
 
@@ -548,7 +547,7 @@ def test_population_only_dtype_transfer_is_rejected():
     space = _make_space(n_agents=2)
     space.population.to(space.device, dtype=torch.float64)
 
-    with pytest.raises(e.ValueError, match="tree.position.dtype"):
+    with pytest.raises(ValueError, match="tree.position.dtype"):
         Otorchmizer(space, GP(), Function(lambda x: x.square().sum()))
 
 

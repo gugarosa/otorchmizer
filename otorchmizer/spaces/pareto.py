@@ -8,9 +8,6 @@ from __future__ import annotations
 import torch
 
 from otorchmizer.core.space import Space
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class ParetoSpace(Space):
@@ -21,6 +18,7 @@ class ParetoSpace(Space):
         data_points: torch.Tensor,
         mapping: list[str] | None = None,
         device: str | torch.device = "auto",
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize a Pareto search space.
 
@@ -28,6 +26,7 @@ class ParetoSpace(Space):
             data_points: Predefined data with shape (n_agents, n_variables).
             mapping: Human-readable names for the decision variables.
             device: Device used to store population tensors.
+            dtype: Storage dtype, or None to preserve floating-point input precision.
 
         Notes:
             Agents are initialized from `data_points` instead of random samples, and bound clipping is disabled.
@@ -35,9 +34,13 @@ class ParetoSpace(Space):
 
         """
 
-        logger.info("Creating class: ParetoSpace.")
-
+        if not isinstance(data_points, torch.Tensor):
+            raise TypeError("`data_points` must be a tensor.")
+        if data_points.ndim != 2:
+            raise ValueError("`data_points` must have shape (n_agents, n_variables).")
         n_agents, n_variables = data_points.shape
+        if dtype is None and data_points.is_floating_point():
+            dtype = data_points.dtype
 
         super().__init__(
             n_agents=n_agents,
@@ -47,14 +50,11 @@ class ParetoSpace(Space):
             upper_bound=[0.0] * n_variables,
             mapping=mapping,
             device=device,
+            dtype=dtype,
         )
 
-        if data_points.is_floating_point():
-            self.population.to(self.device, dtype=data_points.dtype)
-        self._data_points = data_points.to(self.device)
+        self._data_points = data_points.to(device=self.device, dtype=self.population.dtype).clone()
         self.build()
-
-        logger.info("Class created.")
 
     def _initialize(self) -> None:
         self.population.initialize_static(self._data_points)

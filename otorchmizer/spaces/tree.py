@@ -9,13 +9,9 @@ import torch
 
 import otorchmizer.math.random as r
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.node import Node
 from otorchmizer.core.space import Space
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class TreeSpace(Space):
@@ -33,6 +29,7 @@ class TreeSpace(Space):
         functions: list[str] | None = None,
         mapping: list[str] | None = None,
         device: str | torch.device = "auto",
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize a tree-based search space.
 
@@ -47,6 +44,7 @@ class TreeSpace(Space):
             functions: Function node names available to generated trees.
             mapping: Human-readable names for the decision variables.
             device: Device used to store population tensors.
+            dtype: Storage dtype, or None to use the PyTorch default.
 
         Raises:
             TypeError: A terminal count, depth, or function collection has an invalid type.
@@ -57,8 +55,6 @@ class TreeSpace(Space):
 
         """
 
-        logger.info("Creating class: TreeSpace.")
-
         super().__init__(
             n_agents=n_agents,
             n_variables=n_variables,
@@ -67,29 +63,30 @@ class TreeSpace(Space):
             upper_bound=upper_bound,
             mapping=mapping,
             device=device,
+            dtype=dtype,
         )
         self.device = self.population.positions.device
         self.population.device = self.device
 
         if not isinstance(n_terminals, int):
-            raise e.TypeError("`n_terminals` should be an integer.")
+            raise TypeError("`n_terminals` should be an integer.")
         if n_terminals <= 0:
-            raise e.ValueError("`n_terminals` should be greater than 0.")
+            raise ValueError("`n_terminals` should be greater than 0.")
         if not isinstance(min_depth, int):
-            raise e.TypeError("`min_depth` should be an integer.")
+            raise TypeError("`min_depth` should be an integer.")
         if min_depth <= 0:
-            raise e.ValueError("`min_depth` should be greater than 0.")
+            raise ValueError("`min_depth` should be greater than 0.")
         if not isinstance(max_depth, int):
-            raise e.TypeError("`max_depth` should be an integer.")
+            raise TypeError("`max_depth` should be an integer.")
         if max_depth < min_depth:
-            raise e.ValueError("`max_depth` should be greater than or equal to `min_depth`.")
+            raise ValueError("`max_depth` should be greater than or equal to `min_depth`.")
         if functions is not None and not isinstance(functions, list):
-            raise e.TypeError("`functions` should be a list.")
+            raise TypeError("`functions` should be a list.")
 
         functions = functions or []
         unsupported = [name for name in functions if name not in c.FUNCTION_N_ARGS]
         if unsupported:
-            raise e.ValueError(f"`functions` contains unsupported functions: {unsupported}.")
+            raise ValueError(f"`functions` contains unsupported functions: {unsupported}.")
 
         self.n_terminals = n_terminals
         self.min_depth = min_depth
@@ -99,8 +96,6 @@ class TreeSpace(Space):
         self._create_terminals()
         self._create_trees()
         self.build()
-
-        logger.info("Class created.")
 
     def _create_terminals(self) -> None:
         lb = self.population.lb.squeeze(-1)
@@ -123,6 +118,8 @@ class TreeSpace(Space):
         self._best_tree_needs_evaluation = False
 
     def _initialize(self) -> None:
+        self.population.best_fitness.fill_(torch.inf)
+        self._best_tree_needs_evaluation = False
         self.sync_positions()
         self.population.best_position = self.population.positions[0].clone()
 
@@ -137,7 +134,7 @@ class TreeSpace(Space):
 
         Raises:
             TypeError: The tree is not a Node.
-            SizeError: The expression result has an incompatible shape.
+            ValueError: The expression result has an incompatible shape.
             ValueError: The expression result has an incompatible device, dtype, or non-finite value.
 
         Notes:
@@ -147,19 +144,19 @@ class TreeSpace(Space):
         """
 
         if not isinstance(tree, Node):
-            raise e.TypeError("`tree` should be a Node.")
+            raise TypeError("`tree` should be a Node.")
 
         position = tree.position
         expected = (self.population.n_variables, self.population.n_dimensions)
         if position is None or tuple(position.shape) != expected:
             actual = None if position is None else tuple(position.shape)
-            raise e.SizeError(f"`tree.position` must have shape {expected}, but got {actual}.")
+            raise ValueError(f"`tree.position` must have shape {expected}, but got {actual}.")
         if position.device != self.device:
-            raise e.ValueError(f"`tree.position.device` should be {self.device}, but got {position.device}.")
+            raise ValueError(f"`tree.position.device` should be {self.device}, but got {position.device}.")
         if position.dtype != self.population.dtype:
-            raise e.ValueError(f"`tree.position.dtype` should be {self.population.dtype}, but got {position.dtype}.")
+            raise ValueError(f"`tree.position.dtype` should be {self.population.dtype}, but got {position.dtype}.")
         if not torch.isfinite(position).all():
-            raise e.ValueError("`tree.position` should contain only finite values.")
+            raise ValueError("`tree.position` should contain only finite values.")
 
         return position.clamp(min=self.population.lb, max=self.population.ub)
 
@@ -167,12 +164,12 @@ class TreeSpace(Space):
         """Synchronize tensor positions with trees and invalidate their fitness.
 
         Raises:
-            SizeError: The number of trees differs from the number of agents.
+            ValueError: The number of trees differs from the number of agents.
 
         """
 
         if len(self.trees) != self.population.n_agents:
-            raise e.SizeError(f"`trees` must contain {self.population.n_agents} roots, but got {len(self.trees)}.")
+            raise ValueError(f"`trees` must contain {self.population.n_agents} roots, but got {len(self.trees)}.")
 
         self.population.positions = torch.stack([self.evaluate_tree(tree) for tree in self.trees])
         self.population.fitness.fill_(torch.inf)
@@ -208,7 +205,7 @@ class TreeSpace(Space):
         if not matches:
             self.population.positions = expected
             self.population.best_position = expected_best
-            raise e.ValueError(
+            raise ValueError(
                 "`population.positions` and `population.best_position` cannot be changed independently of their trees; "
                 "tree optimizers support observational callbacks only."
             )
@@ -240,11 +237,11 @@ class TreeSpace(Space):
 
         """
 
-        target_dtype = dtype or self.population.dtype
+        target_dtype = self.population.dtype if dtype is None else dtype
         if not isinstance(target_dtype, torch.dtype):
-            raise e.TypeError("`dtype` should be a torch.dtype.")
+            raise TypeError("`dtype` should be a torch.dtype.")
         if not target_dtype.is_floating_point:
-            raise e.ValueError("`dtype` should be a floating-point dtype.")
+            raise ValueError("`dtype` should be a floating-point dtype.")
 
         target_device = DeviceManager(device).device
         if target_device.type == "cuda" and target_device.index is None:
@@ -287,13 +284,13 @@ class TreeSpace(Space):
         """
 
         if not isinstance(min_depth, int):
-            raise e.TypeError("`min_depth` should be an integer.")
+            raise TypeError("`min_depth` should be an integer.")
         if not isinstance(max_depth, int):
-            raise e.TypeError("`max_depth` should be an integer.")
+            raise TypeError("`max_depth` should be an integer.")
         if min_depth < 0:
-            raise e.ValueError("`min_depth` should be greater than or equal to 0.")
+            raise ValueError("`min_depth` should be greater than or equal to 0.")
         if max_depth < min_depth:
-            raise e.ValueError("`max_depth` should be greater than or equal to `min_depth`.")
+            raise ValueError("`max_depth` should be greater than or equal to `min_depth`.")
 
         return self._grow(0, min_depth, max_depth)
 

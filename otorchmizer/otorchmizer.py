@@ -1,89 +1,93 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Otorchmizer — main optimization entry point.
-
-Orchestrates the full optimization loop:
-initial evaluation → update → clip → evaluate → record history → repeat
-
-"""
+"""Coordinate tensor optimization, per-run callbacks, and trusted checkpoints."""
 
 from __future__ import annotations
 
+import operator
 import time
+from collections.abc import Callable, Sequence
+from os import PathLike
+from typing import Any, SupportsIndex
 
 import dill
 from tqdm import tqdm
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.space import Space
-from otorchmizer.utils import logging
-from otorchmizer.utils.callback import Callback, CallbackVessel
+from otorchmizer.functions.multi_objective.standard import MultiObjectiveFunction
+from otorchmizer.utils.callback import Callback
 from otorchmizer.utils.history import History
 
-logger = logging.get_logger(__name__)
+
+def _emit(callbacks: Sequence[Callback] | None, event: str, *args: Any) -> None:
+    if callbacks is not None:
+        for callback in callbacks:
+            getattr(callback, event)(*args)
 
 
 class Otorchmizer:
-    """Holds all information needed to perform an optimization task.
-
-    Notes:
-        Connects a search space, optimizer, and objective function.
-        Runs the optimization loop with callbacks, history tracking, and checkpoint support.
-
-    """
+    """Coordinate a space, strategy, and scalar objective without cloning their state."""
 
     def __init__(
         self,
         space: Space,
         optimizer: Optimizer,
-        function: Function,
+        function: Callable,
         save_agents: bool = False,
     ) -> None:
-        """Connect built optimization components and allocate optimizer state.
+        """Validate components and compile strategy state once.
 
         Args:
-            space: A built Space instance.
-            optimizer: A built Optimizer instance.
-            function: A built Function instance.
-            save_agents: Whether to save all agent positions per iteration.
+            space: Built space owning the population.
+            optimizer: Strategy whose state is bound and compiled during construction.
+            function: Scalar callable or an existing tensor objective adapter.
+            save_agents: Whether to retain population position snapshots.
 
         Raises:
-            BuildError: The space, optimizer, or function has not been built.
+            TypeError: A component or history option has an invalid type.
+            RuntimeError: The space or optimizer has not been built.
 
         """
 
-        logger.info("Creating class: Otorchmizer.")
-
+        if not isinstance(space, Space):
+            raise TypeError("`space` must be a Space.")
+        if not isinstance(optimizer, Optimizer):
+            raise TypeError("`optimizer` must be an Optimizer.")
         if not space.built:
-            raise e.BuildError("`space` should be built before using Otorchmizer.")
+            raise RuntimeError("`space` must be built before using Otorchmizer.")
         if not optimizer.built:
-            raise e.BuildError("`optimizer` should be built before using Otorchmizer.")
-        if not function.built:
-            raise e.BuildError("`function` should be built before using Otorchmizer.")
+            raise RuntimeError("`optimizer` must be built before using Otorchmizer.")
 
+        history = History(save_agents=save_agents)
+        self.function = function
         self.space = space
         self.optimizer = optimizer
-        self.function = function
-
-        self.optimizer.bind(space)
-        self.optimizer.compile(space.population)
-
-        self.history = History(save_agents=save_agents)
-
+        self.history = history
         self.iteration = 0
         self.total_iterations = 0
         self.n_iterations = 0
 
-        logger.debug(
-            "Space: %s | Optimizer: %s | Function: %s.",
-            self.space,
-            self.optimizer,
-            self.function,
-        )
-        logger.info("Class created.")
+        self.optimizer.bind(space)
+        self.optimizer.compile(space.population)
+
+    @property
+    def function(self) -> Function | MultiObjectiveFunction:
+        """Objective adapter used by subsequent evaluation and update calls.
+
+        Raw scalar callables are wrapped once; existing adapters retain their batching behavior.
+        Assignment changes future dispatch, not previously recorded scores, history, or optimizer state.
+        Use a fresh space and optimizer for an independent objective rather than mixing incompatible scores.
+
+        """
+
+        return self._function
+
+    @function.setter
+    def function(self, function: Callable) -> None:
+        self._function = function if isinstance(function, (Function, MultiObjectiveFunction)) else Function(function)
 
     def _make_context(self) -> UpdateContext:
         return UpdateContext(
@@ -94,131 +98,142 @@ class Otorchmizer:
             device=self.space.device,
         )
 
-    def evaluate(self, callbacks: CallbackVessel) -> None:
-        """Runs the evaluation pipeline with callbacks.
+    def evaluate(self, callbacks: Sequence[Callback] | None = None) -> None:
+        """Evaluate live model state between ordered callback hooks.
 
         Args:
-            callbacks: Callback vessel for lifecycle hooks.
+            callbacks: Per-call callback sequence, or None.
+
+        Notes:
+            Replacements made by before-evaluation callbacks are resolved before evaluation.
+            Exceptions propagate without an after hook or rollback.
 
         """
 
         self.optimizer.validate_space(self.space)
-        callbacks.on_evaluate_before(self.space.population, self.function)
+        _emit(callbacks, "on_evaluate_before", self.space.population, self.function)
         self.optimizer.validate_space(self.space)
         self.optimizer.evaluate(self.space.population, self.function)
         self.optimizer.validate_space(self.space)
-        callbacks.on_evaluate_after(self.space.population, self.function)
+        _emit(callbacks, "on_evaluate_after", self.space.population, self.function)
         self.optimizer.validate_space(self.space)
 
-    def update(self, callbacks: CallbackVessel) -> None:
-        """Runs the update pipeline with callbacks and bound clipping.
+    def update(self, callbacks: Sequence[Callback] | None = None) -> None:
+        """Update positions between callbacks, then enforce bounds.
 
         Args:
-            callbacks: Callback vessel for lifecycle hooks.
+            callbacks: Per-call callback sequence, or None.
+
+        Notes:
+            Context fields are read-only stage snapshots. Referenced state remains live.
+            Assign replacements on the model, not the context; the update resolves a fresh context after
+            before-update callbacks. After-update hooks run before clipping.
+            Tree optimizers retain their observational-callback restrictions.
 
         """
 
-        ctx = self._make_context()
-
         self.optimizer.validate_space(self.space)
-        callbacks.on_update_before(ctx)
+        _emit(callbacks, "on_update_before", self._make_context())
         self.optimizer.validate_space(self.space)
-        self.optimizer(ctx)
+        self.optimizer(self._make_context())
         self.optimizer.validate_space(self.space)
-        callbacks.on_update_after(ctx)
+        _emit(callbacks, "on_update_after", self._make_context())
         self.optimizer.validate_space(self.space)
-
         self.space.clip()
         self.optimizer.validate_space(self.space)
 
     def start(
         self,
-        n_iterations: int = 1,
-        callbacks: list[Callback] | None = None,
+        n_iterations: SupportsIndex = 1,
+        callbacks: Sequence[Callback] | None = None,
+        *,
+        progress: bool = False,
     ) -> None:
-        """Starts the optimization task.
+        """Run additional iterations in place without recompiling strategy state.
 
         Args:
-            n_iterations: Maximum number of iterations.
-            callbacks: List of Callback instances.
+            n_iterations: Nonnegative integer budget.
+            callbacks: Ordered callbacks for this invocation only.
+            progress: Whether to display a progress bar.
+
+        Raises:
+            TypeError: The budget, callback sequence, or progress option has an invalid type.
+            ValueError: The budget is negative.
+
+        Notes:
+            A zero budget performs task hooks and initial evaluation without updates.
+            Iteration-local counters restart; total iterations and history accumulate.
+            History precedes iteration-end callbacks. Elapsed time follows normal task completion.
+            Exceptions propagate without rollback or a guaranteed task-end hook.
 
         """
 
-        logger.info("Starting optimization task.")
+        try:
+            iterations = operator.index(n_iterations)
+        except TypeError as error:
+            raise TypeError("`n_iterations` must be an integer.") from error
+        if iterations < 0:
+            raise ValueError("`n_iterations` must be non-negative.")
+        if callbacks is not None and (
+            not isinstance(callbacks, Sequence) or any(not isinstance(callback, Callback) for callback in callbacks)
+        ):
+            raise TypeError("`callbacks` must be a sequence of Callback instances.")
+        if not isinstance(progress, bool):
+            raise TypeError("`progress` must be a boolean.")
 
-        self.n_iterations = n_iterations
-        vessel = CallbackVessel(callbacks)
+        self.n_iterations = iterations
+        start_time = time.perf_counter()
+        _emit(callbacks, "on_task_begin", self)
+        self.evaluate(callbacks)
 
-        start_time = time.time()
-
-        vessel.on_task_begin(self)
-
-        self.evaluate(vessel)
-
-        with tqdm(total=n_iterations, ascii=True) as bar:
-            for t in range(n_iterations):
-                logger.to_file(f"Iteration {t + 1}/{n_iterations}")
-
+        with tqdm(total=iterations, ascii=True, disable=not progress) as bar:
+            for t in range(iterations):
                 self.total_iterations += 1
                 self.iteration = t
+                _emit(callbacks, "on_iteration_begin", self.total_iterations, self)
+                self.update(callbacks)
+                self.evaluate(callbacks)
 
-                vessel.on_iteration_begin(self.total_iterations, self)
-
-                self.update(vessel)
-                self.evaluate(vessel)
-
-                best_fit = self.space.population.best_fitness.item()
-                bar.set_postfix(fitness=best_fit)
-                bar.update()
-
+                if progress:
+                    bar.set_postfix(fitness=self.space.population.best_fitness.item())
+                    bar.update()
                 self.history.dump(
-                    best_agent=(
-                        self.space.population.best_position,
-                        self.space.population.best_fitness,
-                    ),
+                    best_agent=(self.space.population.best_position, self.space.population.best_fitness),
                     positions=self.space.population.positions,
                     fitness=self.space.population.fitness,
                 )
-
-                vessel.on_iteration_end(self.total_iterations, self)
+                _emit(callbacks, "on_iteration_end", self.total_iterations, self)
                 self.optimizer.validate_space(self.space)
 
-                logger.to_file(f"Fitness: {best_fit}")
-
-        vessel.on_task_end(self)
+        _emit(callbacks, "on_task_end", self)
         self.optimizer.validate_space(self.space)
+        self.history.dump(time=time.perf_counter() - start_time)
 
-        elapsed = time.time() - start_time
-        self.history.dump(time=elapsed)
-
-        logger.info("Optimization task ended.")
-        logger.info("It took %s seconds.", elapsed)
-
-    def save(self, file_path: str) -> None:
-        """Saves the optimization model to a dill file.
+    def save(self, file_path: str | PathLike[str]) -> None:
+        """Serialize model state without retaining per-run callbacks or compiled dispatch.
 
         Args:
-            file_path: Output file path.
+            file_path: Output checkpoint path whose parent already exists.
 
         """
 
-        with open(file_path, "wb") as f:
-            dill.dump(self, f)
+        with open(file_path, "wb") as output:
+            dill.dump(self, output)
 
     @classmethod
-    def load(cls, file_path: str) -> Otorchmizer:
-        """Loads an optimization model from a dill file.
+    def load(cls, file_path: str | PathLike[str]) -> Otorchmizer:
+        """Restore a trusted checkpoint without recompiling optimizer buffers.
 
         Args:
-            file_path: Input file path.
+            file_path: Input checkpoint path.
 
         Returns:
-            Loaded Otorchmizer instance.
+            Restored model using eager optimizer dispatch.
 
-        Notes:
-            Load only trusted checkpoints because dill deserialization can execute code.
+        Warning:
+            Dill deserialization can execute code. Load only trusted checkpoints.
 
         """
 
-        with open(file_path, "rb") as f:
-            return dill.load(f)
+        with open(file_path, "rb") as source:
+            return dill.load(source)

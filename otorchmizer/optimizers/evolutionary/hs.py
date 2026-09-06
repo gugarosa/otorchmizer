@@ -12,16 +12,13 @@ References:
 from __future__ import annotations
 
 import math
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class HS(Optimizer):
@@ -35,15 +32,11 @@ class HS(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> HS.")
-
         self.HMCR = 0.7
         self.PAR = 0.7
         self.bw = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def HMCR(self) -> float:
@@ -53,11 +46,11 @@ class HS(Optimizer):
 
     @HMCR.setter
     def HMCR(self, HMCR: float) -> None:
-        if not isinstance(HMCR, (float, int)):
-            raise e.TypeError("`HMCR` must be a float or integer.")
+        if not isinstance(HMCR, Real):
+            raise TypeError("`HMCR` must be a float or integer.")
         if not 0 <= HMCR <= 1:
-            raise e.ValueError("`HMCR` must be between 0 and 1.")
-        self._HMCR = HMCR
+            raise ValueError("`HMCR` must be between 0 and 1.")
+        self._HMCR = float(HMCR)
 
     @property
     def PAR(self) -> float:
@@ -67,11 +60,11 @@ class HS(Optimizer):
 
     @PAR.setter
     def PAR(self, PAR: float) -> None:
-        if not isinstance(PAR, (float, int)):
-            raise e.TypeError("`PAR` must be a float or integer.")
+        if not isinstance(PAR, Real):
+            raise TypeError("`PAR` must be a float or integer.")
         if not 0 <= PAR <= 1:
-            raise e.ValueError("`PAR` must be between 0 and 1.")
-        self._PAR = PAR
+            raise ValueError("`PAR` must be between 0 and 1.")
+        self._PAR = float(PAR)
 
     @property
     def bw(self) -> float:
@@ -81,11 +74,11 @@ class HS(Optimizer):
 
     @bw.setter
     def bw(self, bw: float) -> None:
-        if not isinstance(bw, (float, int)):
-            raise e.TypeError("`bw` must be a float or integer.")
+        if not isinstance(bw, Real):
+            raise TypeError("`bw` must be a float or integer.")
         if bw < 0:
-            raise e.ValueError("`bw` must be non-negative.")
-        self._bw = bw
+            raise ValueError("`bw` must be non-negative.")
+        self._bw = float(bw)
 
     def _generate_new_harmony(self, pop, device) -> torch.Tensor:
         n = pop.n_agents
@@ -201,7 +194,7 @@ class GHS(IHS):
         return new_pos
 
 
-class SGHS(GHS):
+class SGHS(HS):
     """Apply Global-Best Harmony Search with learned sampling parameters."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
@@ -215,6 +208,8 @@ class SGHS(GHS):
         self.LP = 100
         self.HMCRm = 0.98
         self.PARm = 0.9
+        self.bw_min = 1.0
+        self.bw_max = 10.0
 
         super().__init__(params)
 
@@ -229,6 +224,22 @@ class SGHS(GHS):
         self.lp = 1
         self.HMCR_history = []
         self.PAR_history = []
+
+    def _generate_new_harmony(self, pop, device) -> torch.Tensor:
+        new_pos = pop.best_position.clone()
+        lb = pop.lb
+        ub = pop.ub
+
+        for j in range(pop.n_variables):
+            if torch.rand(1, device=device, dtype=pop.dtype).item() < self.HMCR:
+                adjustment = (2 * torch.rand(1, device=device, dtype=pop.dtype).item() - 1) * self.bw
+                new_pos[j] += adjustment
+                if torch.rand(1, device=device, dtype=pop.dtype).item() < self.PAR:
+                    new_pos[j] = pop.best_position[j]
+            else:
+                new_pos[j] = torch.rand(pop.n_dimensions, device=device, dtype=pop.dtype) * (ub[j] - lb[j]) + lb[j]
+
+        return new_pos
 
     def update(self, ctx: UpdateContext) -> None:
         """Sample adaptive parameters and generate one harmony.
@@ -308,6 +319,27 @@ class NGHS(HS):
             new_pos[j] = torch.rand(pop.n_dimensions, device=device, dtype=pop.dtype) * (ub[j] - lb[j]) + lb[j]
 
         return new_pos
+
+    def update(self, ctx: UpdateContext) -> None:
+        """Generate a harmony and unconditionally replace the worst harmony.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
+        pop = ctx.space.population
+        new_pos = self._generate_new_harmony(pop, pop.device)
+        new_pos = new_pos.clamp(min=pop.lb, max=pop.ub)
+        new_fit = ctx.function(new_pos.unsqueeze(0))[0]
+
+        if new_fit < pop.best_fitness:
+            pop.best_position = new_pos.clone()
+            pop.best_fitness = new_fit.clone()
+
+        worst_idx = pop.fitness.argmax()
+        pop.positions[worst_idx] = new_pos
+        pop.fitness[worst_idx] = new_fit
 
 
 class GOGHS(NGHS):

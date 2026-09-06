@@ -3,6 +3,7 @@
 
 """Tests for math modules: random, distribution, general, hyper."""
 
+import pytest
 import torch
 
 from otorchmizer.math import distribution as d
@@ -58,6 +59,11 @@ class TestDistribution:
         probs = torch.tensor([0.1, 0.2, 0.3, 0.4])
         result = d.generate_choice_distribution(n=4, probs=probs, size=2)
         assert result.shape == (2,)
+
+    @pytest.mark.parametrize("probs", [torch.tensor([0.0, 0.0, 1.0]), torch.tensor([[1.0]])])
+    def test_choice_rejects_weights_outside_declared_population(self, probs):
+        with pytest.raises(ValueError, match="probs"):
+            d.generate_choice_distribution(n=1, probs=probs, size=1)
 
 
 class TestGeneral:

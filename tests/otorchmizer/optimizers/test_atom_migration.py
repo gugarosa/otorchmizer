@@ -9,7 +9,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core import Function, Population, UpdateContext
 from otorchmizer.optimizers.science import ASO
 
@@ -91,5 +90,5 @@ def test_atom_handles_coincident_atoms_and_extreme_finite_fitness():
 
 @pytest.mark.parametrize("beta", [-0.1, 1.1])
 def test_atom_rejects_invalid_constraint_weight(beta):
-    with pytest.raises(e.ValueError, match="`beta` must be between"):
+    with pytest.raises(ValueError, match="`beta` must be between"):
         ASO({"beta": beta})

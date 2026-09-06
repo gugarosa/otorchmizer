@@ -11,15 +11,12 @@ References:
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class COA(Optimizer):
@@ -33,13 +30,9 @@ class COA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> COA.")
-
         self.n_p = 2
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def n_p(self) -> int:
@@ -49,11 +42,11 @@ class COA(Optimizer):
 
     @n_p.setter
     def n_p(self, n_p: int) -> None:
-        if not isinstance(n_p, int):
-            raise e.TypeError("`n_p` must be an integer.")
+        if not isinstance(n_p, Integral):
+            raise TypeError("`n_p` must be an integer.")
         if n_p <= 0:
-            raise e.ValueError("`n_p` must be positive.")
-        self._n_p = n_p
+            raise ValueError("`n_p` must be positive.")
+        self._n_p = int(n_p)
 
     def compile(self, population) -> None:
         """Calculate the nominal coyotes per pack.
@@ -64,7 +57,7 @@ class COA(Optimizer):
         """
 
         if self.n_p > population.n_agents:
-            raise e.ValueError("`n_p` must not exceed `population.n_agents`.")
+            raise ValueError("`n_p` must not exceed `population.n_agents`.")
 
         self.n_c = population.n_agents // self.n_p
 

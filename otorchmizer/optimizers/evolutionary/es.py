@@ -11,15 +11,12 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class ES(Optimizer):
@@ -33,13 +30,9 @@ class ES(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> ES.")
-
         self.child_ratio = 0.5
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def child_ratio(self) -> float:
@@ -49,11 +42,11 @@ class ES(Optimizer):
 
     @child_ratio.setter
     def child_ratio(self, child_ratio: float) -> None:
-        if not isinstance(child_ratio, (float, int)):
-            raise e.TypeError("`child_ratio` must be a float or integer.")
+        if not isinstance(child_ratio, Real):
+            raise TypeError("`child_ratio` must be a float or integer.")
         if not 0 <= child_ratio <= 1:
-            raise e.ValueError("`child_ratio` must be between 0 and 1.")
-        self._child_ratio = child_ratio
+            raise ValueError("`child_ratio` must be between 0 and 1.")
+        self._child_ratio = float(child_ratio)
 
     def compile(self, population) -> None:
         """Initialize child count and mutation strategies.

@@ -12,11 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import otorchmizer.math.random as r
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class HC(Optimizer):
@@ -35,14 +31,10 @@ class HC(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> HC.")
-
         self.r_mean = 0.0
         self.r_var = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def r_mean(self) -> float:
@@ -68,7 +60,7 @@ class HC(Optimizer):
         """
 
         if not isinstance(r_mean, (float, int)):
-            raise e.TypeError("`r_mean` must be a float or integer.")
+            raise TypeError("`r_mean` must be a float or integer.")
         self._r_mean = r_mean
 
     @property
@@ -96,9 +88,9 @@ class HC(Optimizer):
         """
 
         if not isinstance(r_var, (float, int)):
-            raise e.TypeError("`r_var` must be a float or integer.")
+            raise TypeError("`r_var` must be a float or integer.")
         if r_var < 0:
-            raise e.ValueError("`r_var` must be non-negative.")
+            raise ValueError("`r_var` must be non-negative.")
         self._r_var = r_var
 
     def update(self, ctx: UpdateContext) -> None:

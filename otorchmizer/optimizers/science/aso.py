@@ -17,12 +17,8 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class ASO(Optimizer):
@@ -42,11 +38,9 @@ class ASO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> ASO.")
         self.alpha = 50.0
         self.beta = 0.2
         super().__init__(params)
-        logger.info("Class overrided.")
 
     @property
     def alpha(self) -> float:
@@ -72,7 +66,7 @@ class ASO(Optimizer):
         """
 
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+            raise TypeError("`alpha` must be a float or integer.")
         self._alpha = alpha
 
     @property
@@ -100,9 +94,9 @@ class ASO(Optimizer):
         """
 
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
         if not 0 <= beta <= 1:
-            raise e.ValueError("`beta` must be between 0 and 1.")
+            raise ValueError("`beta` must be between 0 and 1.")
         self._beta = beta
 
     def compile(self, population: Population) -> None:
@@ -129,7 +123,7 @@ class ASO(Optimizer):
         pop = ctx.space.population
         n = pop.n_agents
         if not torch.isfinite(pop.fitness).all():
-            raise e.ValueError("`population.fitness` must be finite for ASO mass calculation.")
+            raise ValueError("`population.fitness` must be finite for ASO mass calculation.")
 
         tiny = torch.finfo(pop.dtype).tiny
         fitness = pop.fitness / pop.fitness.abs().max().clamp_min(tiny)

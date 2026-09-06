@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class WDO(Optimizer):
@@ -43,8 +39,6 @@ class WDO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> WDO.")
-
         self.v_max = 0.3
         self.alpha = 0.8
         self.g = 0.6
@@ -55,11 +49,9 @@ class WDO(Optimizer):
         for name in ("g", "c", "RT"):
             value = getattr(self, name)
             if not isinstance(value, (float, int)):
-                raise e.TypeError(f"`{name}` must be a float or integer.")
+                raise TypeError(f"`{name}` must be a float or integer.")
             if value < 0:
-                raise e.ValueError(f"`{name}` must be nonnegative.")
-
-        logger.info("Class overrided.")
+                raise ValueError(f"`{name}` must be nonnegative.")
 
     @property
     def v_max(self) -> float:
@@ -86,9 +78,9 @@ class WDO(Optimizer):
         """
 
         if not isinstance(v_max, (float, int)):
-            raise e.TypeError("`v_max` must be a float or integer.")
+            raise TypeError("`v_max` must be a float or integer.")
         if v_max < 0:
-            raise e.ValueError("`v_max` must be nonnegative.")
+            raise ValueError("`v_max` must be nonnegative.")
         self._v_max = v_max
 
     @property
@@ -116,9 +108,9 @@ class WDO(Optimizer):
         """
 
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+            raise TypeError("`alpha` must be a float or integer.")
         if not 0 <= alpha <= 1:
-            raise e.ValueError("`alpha` must be between 0 and 1.")
+            raise ValueError("`alpha` must be between 0 and 1.")
         self._alpha = alpha
 
     def compile(self, population) -> None:

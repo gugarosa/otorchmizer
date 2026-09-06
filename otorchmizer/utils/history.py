@@ -10,8 +10,6 @@ from typing import Any
 import numpy as np
 import torch
 
-import otorchmizer.utils.exception as e
-
 
 class History:
     """Records per-iteration optimization data.
@@ -45,7 +43,7 @@ class History:
     @save_agents.setter
     def save_agents(self, save_agents: bool) -> None:
         if not isinstance(save_agents, bool):
-            raise e.TypeError("`save_agents` should be a boolean.")
+            raise TypeError("`save_agents` should be a boolean.")
         self._save_agents = save_agents
 
     @staticmethod
@@ -93,26 +91,46 @@ class History:
             else:
                 getattr(self, key).append(output)
 
-    def get_convergence(self, key: str, index: int = 0) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    def get_convergence(self, key: str, index: int | None = None) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """Gets the convergence list of a specified key.
 
         Args:
             key: Key to retrieve.
-            index: Compatibility argument retained without affecting retrieval.
+            index: Agent index for positions or fitness, or None to return all recorded agents.
 
         Returns:
             History as an array, or a pair of position and fitness arrays for best_agent.
 
         Raises:
             AttributeError: No history attribute exists for the requested key.
+            TypeError: The agent index is not an integer or None.
+            ValueError: An index is supplied for a key without an agent axis.
+            IndexError: The index is outside the recorded population.
+
+        Notes:
+            Positions have shape (n_records, n_agents, n_variables, n_dimensions) and fitness (n_records, n_agents).
+            Agent selection removes only its axis. Best positions retain (n_records, n_variables, n_dimensions).
+            With changing population sizes, selecting an index stacks that row from each record.
+            Unindexed ragged positions or fitness return a one-dimensional object array of per-record arrays.
 
         """
 
-        attr = np.asarray(getattr(self, key), dtype=object)
+        if index is not None and key not in ("positions", "fitness"):
+            raise ValueError("`index` is only supported for positions and fitness histories.")
+        if index is not None and (not isinstance(index, (int, np.integer)) or isinstance(index, bool)):
+            raise TypeError("`index` must be an integer or None.")
+        attr = getattr(self, key)
 
         if key == "best_agent":
             positions = [a[0] for a in attr]
             fitnesses = [a[1] for a in attr]
             return np.array(positions), np.array(fitnesses)
 
-        return np.array(attr.tolist())
+        if index is not None:
+            return np.asarray([record[index] for record in attr])
+        if key in ("positions", "fitness") and len({np.shape(record) for record in attr}) > 1:
+            result = np.empty(len(attr), dtype=object)
+            for i, record in enumerate(attr):
+                result[i] = np.asarray(record)
+            return result
+        return np.asarray(attr)

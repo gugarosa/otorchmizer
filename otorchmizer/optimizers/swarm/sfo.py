@@ -17,11 +17,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SFO(Optimizer):
@@ -43,15 +39,11 @@ class SFO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> SFO.")
-
         self.PP = 0.1
         self.A = 4.0
         self.e = 0.001
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def PP(self) -> float:
@@ -62,9 +54,9 @@ class SFO(Optimizer):
     @PP.setter
     def PP(self, PP: float) -> None:
         if not isinstance(PP, (float, int)):
-            raise e.TypeError("`PP` must be a float or integer.")
+            raise TypeError("`PP` must be a float or integer.")
         if not 0 < PP <= 1:
-            raise e.ValueError("`PP` must be greater than 0 and at most 1.")
+            raise ValueError("`PP` must be greater than 0 and at most 1.")
         self._PP = PP
 
     @property
@@ -76,9 +68,9 @@ class SFO(Optimizer):
     @A.setter
     def A(self, A: float) -> None:
         if not isinstance(A, (float, int)):
-            raise e.TypeError("`A` must be a float or integer.")
+            raise TypeError("`A` must be a float or integer.")
         if A < 0:
-            raise e.ValueError("`A` must be non-negative.")
+            raise ValueError("`A` must be non-negative.")
         self._A = A
 
     @property
@@ -90,9 +82,9 @@ class SFO(Optimizer):
     @e.setter
     def e(self, e_val: float) -> None:
         if not isinstance(e_val, (float, int)):
-            raise e.TypeError("`e` must be a float or integer.")
+            raise TypeError("`e` must be a float or integer.")
         if e_val < 0:
-            raise e.ValueError("`e` must be non-negative.")
+            raise ValueError("`e` must be non-negative.")
         self._e = e_val
 
     def compile(self, population) -> None:

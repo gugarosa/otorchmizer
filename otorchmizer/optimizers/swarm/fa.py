@@ -11,15 +11,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class FA(Optimizer):
@@ -38,15 +35,11 @@ class FA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> FA.")
-
         self.alpha = 0.5
         self.beta = 0.2
         self.gamma = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def alpha(self) -> float:
@@ -57,9 +50,9 @@ class FA(Optimizer):
     @alpha.setter
     def alpha(self, alpha: float) -> None:
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
-        if alpha < 0:
-            raise e.ValueError("`alpha` must be non-negative.")
+            raise TypeError("`alpha` must be a float or integer.")
+        if not math.isfinite(alpha) or alpha < 0:
+            raise ValueError("`alpha` must be finite and non-negative.")
         self._alpha = alpha
 
     @property
@@ -71,9 +64,9 @@ class FA(Optimizer):
     @beta.setter
     def beta(self, beta: float) -> None:
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
-        if beta < 0:
-            raise e.ValueError("`beta` must be non-negative.")
+            raise TypeError("`beta` must be a float or integer.")
+        if not math.isfinite(beta) or beta < 0:
+            raise ValueError("`beta` must be finite and non-negative.")
         self._beta = beta
 
     @property
@@ -85,9 +78,9 @@ class FA(Optimizer):
     @gamma.setter
     def gamma(self, gamma: float) -> None:
         if not isinstance(gamma, (float, int)):
-            raise e.TypeError("`gamma` must be a float or integer.")
-        if gamma < 0:
-            raise e.ValueError("`gamma` must be non-negative.")
+            raise TypeError("`gamma` must be a float or integer.")
+        if not math.isfinite(gamma) or gamma < 0:
+            raise ValueError("`gamma` must be finite and non-negative.")
         self._gamma = gamma
 
     def update(self, ctx: UpdateContext) -> None:
@@ -97,7 +90,7 @@ class FA(Optimizer):
             ctx: Population, objective function, and iteration state.
 
         Notes:
-            Brighter agents are processed in ascending fitness order.
+            Brighter agents are processed in the frozen population's original order.
 
         """
 
@@ -114,9 +107,7 @@ class FA(Optimizer):
         pos_flat = pop.positions.reshape(n, -1).clone()
         temp_flat = temp_positions.reshape(n, -1)
 
-        sorted_idx = torch.argsort(temp_fitness)
-
-        for j_idx in sorted_idx:
+        for j_idx in range(n):
             j_fit = temp_fitness[j_idx]
             j_pos = temp_flat[j_idx]
 
@@ -130,7 +121,7 @@ class FA(Optimizer):
 
             beta_val = self.beta * torch.exp(-self.gamma * dist).unsqueeze(-1)
 
-            r1 = torch.rand_like(pos_flat[attracted])
-            pos_flat[attracted] = beta_val * (j_pos.unsqueeze(0) + pos_flat[attracted]) + self.alpha * (r1 - 0.5)
+            random = torch.rand_like(pos_flat[attracted])
+            pos_flat[attracted] = beta_val * (j_pos.unsqueeze(0) + pos_flat[attracted]) + self.alpha * (random - 0.5)
 
         pop.positions = pos_flat.reshape(pop.positions.shape)

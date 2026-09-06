@@ -15,11 +15,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class WWO(Optimizer):
@@ -70,9 +66,9 @@ class WWO(Optimizer):
         """
 
         if not isinstance(value, int):
-            raise e.TypeError("`h_max` must be an integer.")
+            raise TypeError("`h_max` must be an integer.")
         if value <= 0:
-            raise e.ValueError("`h_max` must be positive.")
+            raise ValueError("`h_max` must be positive.")
         self._h_max = value
 
     @property
@@ -100,9 +96,9 @@ class WWO(Optimizer):
         """
 
         if not isinstance(value, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+            raise TypeError("`alpha` must be a float or integer.")
         if value <= 0:
-            raise e.ValueError("`alpha` must be positive.")
+            raise ValueError("`alpha` must be positive.")
         self._alpha = float(value)
 
     @property
@@ -130,9 +126,9 @@ class WWO(Optimizer):
         """
 
         if not isinstance(value, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
         if value < 0:
-            raise e.ValueError("`beta` must be non-negative.")
+            raise ValueError("`beta` must be non-negative.")
         self._beta = float(value)
 
     @property
@@ -160,9 +156,9 @@ class WWO(Optimizer):
         """
 
         if not isinstance(value, int):
-            raise e.TypeError("`k_max` must be an integer.")
+            raise TypeError("`k_max` must be an integer.")
         if value <= 0:
-            raise e.ValueError("`k_max` must be positive.")
+            raise ValueError("`k_max` must be positive.")
         self._k_max = value
 
     def compile(self, population) -> None:
@@ -184,7 +180,7 @@ class WWO(Optimizer):
     @staticmethod
     def _validate_fitness(fitness: torch.Tensor, offender: str) -> None:
         if not torch.isfinite(fitness).all() or (fitness < 0).any():
-            raise e.ValueError(f"`{offender}` must contain finite non-negative values for WWO.")
+            raise ValueError(f"`{offender}` must contain finite non-negative values for WWO.")
 
     @staticmethod
     def _repair(position: torch.Tensor, population) -> torch.Tensor:
@@ -204,7 +200,7 @@ class WWO(Optimizer):
             or numerator <= 0
             or denominator <= 0
         ):
-            raise e.ValueError("`wavelength` ratio operands must be finite and positive.")
+            raise ValueError("`wavelength` ratio operands must be finite and positive.")
 
         length_mantissa, length_exponent = torch.frexp(length)
         numerator_mantissa, numerator_exponent = torch.frexp(numerator)
@@ -223,7 +219,7 @@ class WWO(Optimizer):
             remaining = remaining - step
         result = result.to(dtype=length.dtype)
         if not torch.isfinite(result) or result <= 0:
-            raise e.ValueError("`wavelength` update must be representable in the population dtype.")
+            raise ValueError("`wavelength` update must be representable in the population dtype.")
         return result
 
     def update(self, ctx: UpdateContext) -> None:

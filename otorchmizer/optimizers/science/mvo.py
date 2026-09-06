@@ -4,9 +4,10 @@
 """Multi-Verse Optimizer.
 
 References:
-    S. Mirjalili, S. M. Mirjalili, and A. Hatamlou.
-    Multi-Verse Optimizer: a nature-inspired algorithm for global optimization.
+    S. Mirjalili, S. M. Mirjalili and A. Hatamlou.
+    Multi-verse optimizer: a nature-inspired algorithm for global optimization.
     Neural Computing and Applications (2016).
+
 """
 
 from __future__ import annotations
@@ -15,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class MVO(Optimizer):
@@ -38,15 +35,11 @@ class MVO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> MVO.")
-
         self.WEP_min = 0.2
         self.WEP_max = 1.0
         self.p = 6.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def WEP_min(self) -> float:
@@ -72,7 +65,7 @@ class MVO(Optimizer):
         """
 
         if not isinstance(WEP_min, (float, int)):
-            raise e.TypeError("`WEP_min` must be a float or integer.")
+            raise TypeError("`WEP_min` must be a float or integer.")
         self._WEP_min = WEP_min
 
     @property
@@ -99,7 +92,7 @@ class MVO(Optimizer):
         """
 
         if not isinstance(WEP_max, (float, int)):
-            raise e.TypeError("`WEP_max` must be a float or integer.")
+            raise TypeError("`WEP_max` must be a float or integer.")
         self._WEP_max = WEP_max
 
     @property
@@ -126,7 +119,7 @@ class MVO(Optimizer):
         """
 
         if not isinstance(p, (float, int)):
-            raise e.TypeError("`p` must be a float or integer.")
+            raise TypeError("`p` must be a float or integer.")
         self._p = p
 
     def update(self, ctx: UpdateContext) -> None:
@@ -168,14 +161,12 @@ class MVO(Optimizer):
                 r2 = torch.rand(1, device=device).item()
                 if r2 < WEP:
                     r3 = torch.rand(1, device=device).item()
-                    width = ub.squeeze(0)[j] - lb.squeeze(0)[j]
+                    displacement = lb.squeeze(0)[j] + torch.rand((), device=device, dtype=pop.dtype) * (
+                        ub.squeeze(0)[j] - lb.squeeze(0)[j]
+                    )
                     if r3 < 0.5:
-                        new_positions[i, j] = best.squeeze(0)[j] + TDR * width * torch.rand(
-                            pop.n_dimensions, device=device
-                        )
+                        new_positions[i, j] = best.squeeze(0)[j] + TDR * displacement
                     else:
-                        new_positions[i, j] = best.squeeze(0)[j] - TDR * width * torch.rand(
-                            pop.n_dimensions, device=device
-                        )
+                        new_positions[i, j] = best.squeeze(0)[j] - TDR * displacement
 
         pop.positions = new_positions.clamp(min=lb, max=ub)

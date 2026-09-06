@@ -12,17 +12,14 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -75,7 +72,7 @@ class _LionBatch:
     def concatenate(cls, batches: list[_LionBatch]) -> _LionBatch:
         populated = [batch for batch in batches if batch.size]
         if not populated:
-            raise e.ValueError("`batches` must contain at least one lion.")
+            raise ValueError("`batches` must contain at least one lion.")
         return cls(
             *(torch.cat([getattr(batch, field) for batch in populated], dim=0) for field in cls.__dataclass_fields__)
         )
@@ -92,8 +89,6 @@ class LOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> LOA.")
-
         self.N = 0.2
         self.P = 4
         self.S = 0.8
@@ -104,14 +99,12 @@ class LOA(Optimizer):
 
         super().__init__(params)
 
-        logger.info("Class overrided.")
-
     @staticmethod
     def _validate_ratio(name: str, value: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, (float, int)):
-            raise e.TypeError(f"`{name}` must be a float or integer.")
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"`{name}` must be a float or integer.")
         if not 0 <= value <= 1:
-            raise e.ValueError(f"`{name}` must be between 0 and 1.")
+            raise ValueError(f"`{name}` must be between 0 and 1.")
         return float(value)
 
     @property
@@ -132,11 +125,11 @@ class LOA(Optimizer):
 
     @P.setter
     def P(self, P: int) -> None:
-        if isinstance(P, bool) or not isinstance(P, int):
-            raise e.TypeError("`P` must be an integer.")
+        if isinstance(P, bool) or not isinstance(P, Integral):
+            raise TypeError("`P` must be an integer.")
         if P <= 0:
-            raise e.ValueError("`P` must be positive.")
-        self._P = P
+            raise ValueError("`P` must be positive.")
+        self._P = int(P)
 
     @property
     def S(self) -> float:
@@ -206,9 +199,9 @@ class LOA(Optimizer):
         n_nomads = round(self.N * population.n_agents)
         n_residents = population.n_agents - n_nomads
         if n_nomads < 2:
-            raise e.ValueError("`N * population.n_agents` must allocate at least 2 nomad lions.")
+            raise ValueError("`N * population.n_agents` must allocate at least 2 nomad lions.")
         if n_residents < 2 * self.P:
-            raise e.ValueError("`(1 - N) * population.n_agents` must allocate at least 2 lions per pride.")
+            raise ValueError("`(1 - N) * population.n_agents` must allocate at least 2 lions per pride.")
 
         device = population.device
         n = population.n_agents
@@ -248,14 +241,14 @@ class LOA(Optimizer):
 
     def _check_compiled(self, population: Population) -> None:
         if not hasattr(self, "_compiled_n_agents"):
-            raise e.BuildError("`LOA.compile` must be called before evaluation or update.")
+            raise RuntimeError("`LOA.compile` must be called before evaluation or update.")
         if self._compiled_n_agents != population.n_agents:
-            raise e.SizeError("`population.n_agents` must match the population used by `LOA.compile`.")
+            raise ValueError("`population.n_agents` must match the population used by `LOA.compile`.")
         if (
             self.local_position.device != population.positions.device
             or self.local_position.dtype != population.positions.dtype
         ):
-            raise e.ValueError("`population` device and dtype must match the population used by `LOA.compile`.")
+            raise ValueError("`population` device and dtype must match the population used by `LOA.compile`.")
 
     @staticmethod
     def _record_global(population: Population, positions: torch.Tensor, fitness: torch.Tensor) -> None:
@@ -310,7 +303,7 @@ class LOA(Optimizer):
             candidates = candidates.unsqueeze(0)
         candidates = candidates.clamp(min=population.lb, max=population.ub)
         if not torch.isfinite(candidates).all():
-            raise e.ValueError("`candidate positions` must be finite.")
+            raise ValueError("`candidate positions` must be finite.")
 
         fitness = function(candidates).to(device=population.device, dtype=population.dtype)
         lions.positions[indices] = candidates
@@ -383,12 +376,14 @@ class LOA(Optimizer):
 
             hunters = females[lions.group[females] > 0]
             prey = lions.positions[hunters].mean(dim=0)
-            group_fitness = population.fitness.new_full((3,), -torch.inf)
-            for group_index in range(1, 4):
-                group_members = hunters[lions.group[hunters] == group_index]
-                if group_members.numel():
-                    group_fitness[group_index - 1] = lions.fitness[group_members].sum()
-            center_group = group_fitness.argmax() + 1
+            occupied_groups = torch.unique(lions.group[hunters], sorted=True)
+            hunter_fitness = lions.fitness[hunters]
+            common_scale = hunter_fitness.abs().max().clamp_min(1)
+            scaled_fitness = hunter_fitness / common_scale
+            group_scores = torch.stack(
+                [scaled_fitness[lions.group[hunters] == group_index].sum() for group_index in occupied_groups]
+            )
+            center_group = occupied_groups[group_scores.argmin()]
 
             hunter_order = hunters[torch.randperm(hunters.numel(), device=population.device)]
             for hunter in hunter_order:
@@ -530,7 +525,7 @@ class LOA(Optimizer):
             resident_males = ((lions.pride == pride_index) & ~lions.female).nonzero(as_tuple=True)[0]
             target_males = int(self.pride_sizes[pride_index] - self.pride_females[pride_index])
             if resident_males.numel() < target_males:
-                raise e.ValueError(f"`pride {pride_index}` must contain at least {target_males} male lions.")
+                raise ValueError(f"`pride {pride_index}` must contain at least {target_males} male lions.")
 
             ranking = resident_males[torch.argsort(lions.fitness[resident_males])]
             expelled = ranking[target_males:]
@@ -608,7 +603,7 @@ class LOA(Optimizer):
 
         nomad_females = ((lions.pride < 0) & lions.female).nonzero(as_tuple=True)[0]
         if nomad_females.numel() < total_deficit:
-            raise e.ValueError("`nomad females` must fill every pride migration vacancy.")
+            raise ValueError("`nomad females` must fill every pride migration vacancy.")
         best = nomad_females[torch.argsort(lions.fitness[nomad_females])[:total_deficit]]
         best = best[torch.randperm(best.numel(), device=population.device)]
 
@@ -627,7 +622,7 @@ class LOA(Optimizer):
         target_females = self.nomad_females
         target_males = self.n_nomads - target_females
         if nomad_females.numel() < target_females or nomad_males.numel() < target_males:
-            raise e.ValueError("`nomads` must contain enough lions of each sex for population equilibrium.")
+            raise ValueError("`nomads` must contain enough lions of each sex for population equilibrium.")
 
         female_keep = nomad_females[torch.argsort(lions.fitness[nomad_females])[:target_females]]
         male_keep = nomad_males[torch.argsort(lions.fitness[nomad_males])[:target_males]]
@@ -636,27 +631,27 @@ class LOA(Optimizer):
         controlled = lions.take(keep)
 
         if controlled.size != population.n_agents:
-            raise e.SizeError(f"`controlled population` must contain {population.n_agents} lions.")
+            raise ValueError(f"`controlled population` must contain {population.n_agents} lions.")
         return controlled
 
     def _validate_population(self, lions: _LionBatch, population: Population) -> None:
         if not torch.isfinite(lions.positions).all():
-            raise e.ValueError("`population.positions` must be finite after an LOA update.")
+            raise ValueError("`population.positions` must be finite after an LOA update.")
         if (lions.positions < population.lb).any() or (lions.positions > population.ub).any():
-            raise e.ValueError("`population.positions` must remain within bounds after an LOA update.")
+            raise ValueError("`population.positions` must remain within bounds after an LOA update.")
 
         for pride_index in range(self.P):
             members = lions.pride == pride_index
             if int(members.sum()) != int(self.pride_sizes[pride_index]):
-                raise e.SizeError(f"`pride {pride_index}` must retain its compiled size.")
+                raise ValueError(f"`pride {pride_index}` must retain its compiled size.")
             if int((members & lions.female).sum()) != int(self.pride_females[pride_index]):
-                raise e.SizeError(f"`pride {pride_index}` must retain its compiled female count.")
+                raise ValueError(f"`pride {pride_index}` must retain its compiled female count.")
 
         nomads = lions.pride < 0
         if int(nomads.sum()) != self.n_nomads:
-            raise e.SizeError("`nomads` must retain their compiled population size.")
+            raise ValueError("`nomads` must retain their compiled population size.")
         if int((nomads & lions.female).sum()) != self.nomad_females:
-            raise e.SizeError("`nomads` must retain their compiled female count.")
+            raise ValueError("`nomads` must retain their compiled female count.")
 
     def _synchronize(self, lions: _LionBatch, population: Population) -> None:
         self._validate_population(lions, population)

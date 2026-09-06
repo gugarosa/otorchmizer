@@ -10,19 +10,16 @@ All update rules operate on full population tensors (no per-agent loops).
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
 import otorchmizer.math.random as r
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class PSO(Optimizer):
@@ -42,15 +39,11 @@ class PSO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> PSO.")
-
         self.w = 0.7
         self.c1 = 1.7
         self.c2 = 1.7
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def w(self) -> float:
@@ -61,9 +54,9 @@ class PSO(Optimizer):
     @w.setter
     def w(self, w: float) -> None:
         if not isinstance(w, (float, int)):
-            raise e.TypeError("`w` must be a float or integer.")
-        if w < 0:
-            raise e.ValueError("`w` must be non-negative.")
+            raise TypeError("`w` must be a float or integer.")
+        if not math.isfinite(w) or w < 0:
+            raise ValueError("`w` must be finite and non-negative.")
         self._w = w
 
     @property
@@ -75,9 +68,9 @@ class PSO(Optimizer):
     @c1.setter
     def c1(self, c1: float) -> None:
         if not isinstance(c1, (float, int)):
-            raise e.TypeError("`c1` must be a float or integer.")
-        if c1 < 0:
-            raise e.ValueError("`c1` must be non-negative.")
+            raise TypeError("`c1` must be a float or integer.")
+        if not math.isfinite(c1) or c1 < 0:
+            raise ValueError("`c1` must be finite and non-negative.")
         self._c1 = c1
 
     @property
@@ -89,9 +82,9 @@ class PSO(Optimizer):
     @c2.setter
     def c2(self, c2: float) -> None:
         if not isinstance(c2, (float, int)):
-            raise e.TypeError("`c2` must be a float or integer.")
-        if c2 < 0:
-            raise e.ValueError("`c2` must be non-negative.")
+            raise TypeError("`c2` must be a float or integer.")
+        if not math.isfinite(c2) or c2 < 0:
+            raise ValueError("`c2` must be finite and non-negative.")
         self._c2 = c2
 
     def compile(self, population: Population) -> None:
@@ -172,14 +165,10 @@ class AIWPSO(PSO):
 
         """
 
-        logger.info("Overriding class: PSO -> AIWPSO.")
-
-        self.w_min = 0.1
-        self.w_max = 0.9
+        self._w_min = 0.1
+        self._w_max = 0.9
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def w_min(self) -> float:
@@ -189,10 +178,7 @@ class AIWPSO(PSO):
 
     @w_min.setter
     def w_min(self, w_min: float) -> None:
-        if not isinstance(w_min, (float, int)):
-            raise e.TypeError("`w_min` must be a float or integer.")
-        if w_min < 0:
-            raise e.ValueError("`w_min` must be non-negative.")
+        self._validate_limits(w_min, self.w_max)
         self._w_min = w_min
 
     @property
@@ -203,13 +189,36 @@ class AIWPSO(PSO):
 
     @w_max.setter
     def w_max(self, w_max: float) -> None:
-        if not isinstance(w_max, (float, int)):
-            raise e.TypeError("`w_max` must be a float or integer.")
-        if w_max < 0:
-            raise e.ValueError("`w_max` must be non-negative.")
-        if w_max < self.w_min:
-            raise e.ValueError("`w_max` must be greater than or equal to `w_min`.")
+        self._validate_limits(self.w_min, w_max)
         self._w_max = w_max
+
+    @staticmethod
+    def _validate_limits(w_min: float, w_max: float) -> None:
+        for name, value in (("w_min", w_min), ("w_max", w_max)):
+            if not isinstance(value, (float, int)):
+                raise TypeError(f"`{name}` must be a float or integer.")
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"`{name}` must be finite and non-negative.")
+        if w_max < w_min:
+            raise ValueError("`w_max` must be greater than or equal to `w_min`.")
+
+    def build(self, params: dict[str, Any] | None = None) -> None:
+        """Apply overrides without transiently invalid inertia limits.
+
+        Args:
+            params: Attribute overrides applied to the optimizer.
+
+        """
+
+        supplied = dict(params or {})
+        remaining = dict(supplied)
+        w_min = remaining.pop("w_min", self.w_min)
+        w_max = remaining.pop("w_max", self.w_max)
+        self._validate_limits(w_min, w_max)
+
+        super().build(remaining)
+        self._w_min, self._w_max = w_min, w_max
+        self.params.update({name: value for name, value in (("w_min", w_min), ("w_max", w_max)) if name in supplied})
 
     def _compute_success(self, population: Population) -> None:
 
@@ -266,9 +275,7 @@ class RPSO(PSO):
 
         """
 
-        logger.info("Overriding class: PSO -> RPSO.")
         super().__init__(params)
-        logger.info("Class overrided.")
 
     def compile(self, population: Population) -> None:
         """Initialize persistent optimizer state.
@@ -328,9 +335,7 @@ class SAVPSO(PSO):
 
         """
 
-        logger.info("Overriding class: PSO -> SAVPSO.")
         super().__init__(params)
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -386,9 +391,7 @@ class VPSO(PSO):
 
         """
 
-        logger.info("Overriding class: PSO -> VPSO.")
         super().__init__(params)
-        logger.info("Class overrided.")
 
     def compile(self, population: Population) -> None:
         """Initialize persistent optimizer state.

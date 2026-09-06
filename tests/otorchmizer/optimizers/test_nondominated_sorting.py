@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer import Otorchmizer
 from otorchmizer.core import Function, UpdateContext
 from otorchmizer.optimizers.misc import NDS
@@ -81,5 +80,5 @@ def test_nondominated_sorting_rejects_nan_objectives():
     optimizer.compile(space.population)
     ctx = UpdateContext(SimpleNamespace(population=space.population), Function(_unused_objective), 0, 1, space.device)
 
-    with pytest.raises(e.ValueError, match="NaN objective"):
+    with pytest.raises(ValueError, match="NaN objective"):
         optimizer.update(ctx)

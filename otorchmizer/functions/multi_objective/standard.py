@@ -9,11 +9,7 @@ from collections.abc import Callable
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class MultiObjectiveFunction:
@@ -36,16 +32,11 @@ class MultiObjectiveFunction:
 
         """
 
-        logger.info("Creating class: MultiObjectiveFunction.")
-
         if not isinstance(functions, list):
-            raise e.TypeError("`functions` should be a list.")
+            raise TypeError("`functions` should be a list.")
 
         self.functions = [Function(f, batch=batch) for f in functions]
         self.built = True
-
-        logger.debug("Functions: %d | Built: %s.", len(self.functions), self.built)
-        logger.info("Class created.")
 
     def __call__(self, positions: torch.Tensor) -> torch.Tensor:
         """Evaluates all objectives.

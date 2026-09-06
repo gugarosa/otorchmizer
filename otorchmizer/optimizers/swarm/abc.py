@@ -16,11 +16,7 @@ from typing import Any
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class ABC(Optimizer):
@@ -39,13 +35,9 @@ class ABC(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> ABC.")
-
         self.n_trials = 10
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def n_trials(self) -> int:
@@ -56,9 +48,9 @@ class ABC(Optimizer):
     @n_trials.setter
     def n_trials(self, n_trials: int) -> None:
         if not isinstance(n_trials, int):
-            raise e.TypeError("`n_trials` must be an integer.")
+            raise TypeError("`n_trials` must be an integer.")
         if n_trials <= 0:
-            raise e.ValueError("`n_trials` must be positive.")
+            raise ValueError("`n_trials` must be positive.")
         self._n_trials = n_trials
 
     def compile(self, population) -> None:

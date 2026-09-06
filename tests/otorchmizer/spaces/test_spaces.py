@@ -6,9 +6,8 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
+from otorchmizer.core.node import Node
 from otorchmizer.spaces.boolean import BooleanSpace
-from otorchmizer.spaces.graph import GraphSpace
 from otorchmizer.spaces.grid import GridSpace
 from otorchmizer.spaces.hyper_complex import HyperComplexSpace
 from otorchmizer.spaces.pareto import ParetoSpace
@@ -35,13 +34,6 @@ class TestBooleanSpace:
     def test_mapping(self):
         space = BooleanSpace(n_agents=5, n_variables=2, mapping=["x", "y"])
         assert space.population.mapping == ["x", "y"]
-
-
-class TestGraphSpace:
-    def test_creation(self):
-        space = GraphSpace(n_blocks=5)
-        assert space.n_blocks == 5
-        assert space.built
 
 
 class TestGridSpace:
@@ -161,13 +153,11 @@ class TestTreeSpace:
             max_depth=3,
             functions=["SUM", "SUB"],
         )
-        from otorchmizer.core.node import Node
-
         tree = space.grow(1, 3)
         assert isinstance(tree, Node)
 
     def test_invalid_n_terminals(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             TreeSpace(
                 n_agents=2,
                 n_variables=1,
@@ -180,7 +170,7 @@ class TestTreeSpace:
             )
 
     def test_invalid_min_depth(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             TreeSpace(
                 n_agents=2,
                 n_variables=1,
@@ -193,7 +183,7 @@ class TestTreeSpace:
             )
 
     def test_invalid_max_depth_less_than_min(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             TreeSpace(
                 n_agents=2,
                 n_variables=1,

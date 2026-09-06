@@ -10,7 +10,6 @@ import torch
 
 import otorchmizer.math.distribution as distribution
 import otorchmizer.math.general as general
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.space import Space
@@ -77,11 +76,11 @@ def _ones_distribution(**kwargs) -> torch.Tensor:
 @pytest.mark.parametrize(
     ("name", "value", "error"),
     [
-        ("alpha", -1.0, e.ValueError),
-        ("delta", -1.0, e.ValueError),
-        ("n_cycles", 0, e.ValueError),
-        ("U", -1.0, e.ValueError),
-        ("w", -1.0, e.ValueError),
+        ("alpha", -1.0, ValueError),
+        ("delta", -1.0, ValueError),
+        ("n_cycles", 0, ValueError),
+        ("U", -1.0, ValueError),
+        ("w", -1.0, ValueError),
     ],
 )
 def test_ao_canonical_parameter_validation(name, value, error):
@@ -459,7 +458,7 @@ def test_ppa_requires_two_agents():
     optimizer = PPA()
     space = _space(1)
 
-    with pytest.raises(e.ValueError, match="at least 2"):
+    with pytest.raises(ValueError, match="at least 2"):
         optimizer.compile(space.population)
 
 

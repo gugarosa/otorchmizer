@@ -13,17 +13,14 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.node import Node
 from otorchmizer.optimizers.evolutionary.gp import GP
 from otorchmizer.spaces.tree import TreeSpace
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 def _function(name: str, left: Node, right: Node | None = None) -> Node:
@@ -54,13 +51,9 @@ class GSGP(GP):
 
         """
 
-        logger.info("Overriding class: GP -> GSGP.")
-
         self.mutation_step = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def mutation_step(self) -> float:
@@ -70,10 +63,10 @@ class GSGP(GP):
 
     @mutation_step.setter
     def mutation_step(self, mutation_step: float) -> None:
-        if isinstance(mutation_step, bool) or not isinstance(mutation_step, (float, int)):
-            raise e.TypeError("`mutation_step` should be a float or integer.")
+        if isinstance(mutation_step, bool) or not isinstance(mutation_step, Real):
+            raise TypeError("`mutation_step` should be a float or integer.")
         if mutation_step < 0:
-            raise e.ValueError("`mutation_step` should be greater than or equal to 0.")
+            raise ValueError("`mutation_step` should be greater than or equal to 0.")
         self._mutation_step = float(mutation_step)
 
     @property
@@ -84,10 +77,10 @@ class GSGP(GP):
 
     @prunning_ratio.setter
     def prunning_ratio(self, prunning_ratio: float) -> None:
-        if isinstance(prunning_ratio, bool) or not isinstance(prunning_ratio, (float, int)):
-            raise e.TypeError("`prunning_ratio` should be a float or integer.")
+        if isinstance(prunning_ratio, bool) or not isinstance(prunning_ratio, Real):
+            raise TypeError("`prunning_ratio` should be a float or integer.")
         if prunning_ratio != 0:
-            raise e.ValueError(
+            raise ValueError(
                 "`prunning_ratio` should be 0 for GSGP because geometric semantic operators use complete trees."
             )
         self._prunning_ratio = 0.0
@@ -148,7 +141,7 @@ class GSGP(GP):
             Two independent geometric semantic offspring.
 
         Raises:
-            SizeError: Parent semantics have different shapes.
+            ValueError: Parent semantics have different shapes.
             ValueError: Parent semantics use different devices or dtypes.
 
         """
@@ -156,11 +149,11 @@ class GSGP(GP):
         father_position = father.position
         mother_position = mother.position
         if father_position is None or mother_position is None or father_position.shape != mother_position.shape:
-            raise e.SizeError("`father.position` and `mother.position` should have matching shapes.")
+            raise ValueError("`father.position` and `mother.position` should have matching shapes.")
         if father_position.device != mother_position.device:
-            raise e.ValueError("`father.position` and `mother.position` should use the same device.")
+            raise ValueError("`father.position` and `mother.position` should use the same device.")
         if father_position.dtype != mother_position.dtype:
-            raise e.ValueError("`father.position` and `mother.position` should use the same dtype.")
+            raise ValueError("`father.position` and `mother.position` should use the same dtype.")
 
         mask = torch.rand_like(father_position)
         first = self._semantic_child(father, mother, mask)

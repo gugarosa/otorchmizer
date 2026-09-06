@@ -12,16 +12,13 @@ References:
 
 from __future__ import annotations
 
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class RRA(Optimizer):
@@ -35,16 +32,12 @@ class RRA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> RRA.")
-
         self.d_runner = 2.0
         self.d_root = 0.01
         self.tol = 0.01
         self.max_stall = 1000
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def d_runner(self) -> float:
@@ -54,11 +47,11 @@ class RRA(Optimizer):
 
     @d_runner.setter
     def d_runner(self, d_runner: float) -> None:
-        if not isinstance(d_runner, (float, int)):
-            raise e.TypeError("`d_runner` must be a float or integer.")
+        if not isinstance(d_runner, Real):
+            raise TypeError("`d_runner` must be a float or integer.")
         if d_runner <= 0:
-            raise e.ValueError("`d_runner` must be positive.")
-        self._d_runner = d_runner
+            raise ValueError("`d_runner` must be positive.")
+        self._d_runner = float(d_runner)
 
     @property
     def d_root(self) -> float:
@@ -68,11 +61,11 @@ class RRA(Optimizer):
 
     @d_root.setter
     def d_root(self, d_root: float) -> None:
-        if not isinstance(d_root, (float, int)):
-            raise e.TypeError("`d_root` must be a float or integer.")
+        if not isinstance(d_root, Real):
+            raise TypeError("`d_root` must be a float or integer.")
         if d_root < 0:
-            raise e.ValueError("`d_root` must be non-negative.")
-        self._d_root = d_root
+            raise ValueError("`d_root` must be non-negative.")
+        self._d_root = float(d_root)
 
     @property
     def tol(self) -> float:
@@ -82,11 +75,11 @@ class RRA(Optimizer):
 
     @tol.setter
     def tol(self, tol: float) -> None:
-        if not isinstance(tol, (float, int)):
-            raise e.TypeError("`tol` must be a float or integer.")
+        if not isinstance(tol, Real):
+            raise TypeError("`tol` must be a float or integer.")
         if tol < 0:
-            raise e.ValueError("`tol` must be non-negative.")
-        self._tol = tol
+            raise ValueError("`tol` must be non-negative.")
+        self._tol = float(tol)
 
     @property
     def max_stall(self) -> int:
@@ -96,11 +89,11 @@ class RRA(Optimizer):
 
     @max_stall.setter
     def max_stall(self, max_stall: int) -> None:
-        if not isinstance(max_stall, int):
-            raise e.TypeError("`max_stall` must be an integer.")
+        if not isinstance(max_stall, Integral):
+            raise TypeError("`max_stall` must be an integer.")
         if max_stall <= 0:
-            raise e.ValueError("`max_stall` must be positive.")
-        self._max_stall = max_stall
+            raise ValueError("`max_stall` must be positive.")
+        self._max_stall = int(max_stall)
 
     def compile(self, population) -> None:
         """Initialize stall tracking from the population best.

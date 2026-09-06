@@ -14,9 +14,6 @@ from __future__ import annotations
 from typing import Any
 
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GS(Optimizer):
@@ -35,9 +32,7 @@ class GS(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GS.")
         super().__init__(params)
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one GS step.

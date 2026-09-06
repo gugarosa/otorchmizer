@@ -266,7 +266,7 @@ class TestScienceOptimizers:
         ],
     )
     def test_runs_without_error(self, cls, name):
-        best_fit = run_optimizer(cls)
+        best_fit = run_optimizer(cls, n_agents=16 if cls is MOA else 15)
         assert best_fit < 200
 
     def test_sa_convergence(self):

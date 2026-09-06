@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.population import Population
@@ -236,7 +235,7 @@ def test_sfo_low_attack_power_updates_selected_sardine_variables():
 def test_eho_rejects_more_clans_than_agents():
     optimizer = EHO({"n_clans": 3})
 
-    with pytest.raises(e.ValueError, match="n_clans"):
+    with pytest.raises(ValueError, match="n_clans"):
         optimizer.compile(_population([0.0, 1.0]))
 
 
@@ -244,10 +243,10 @@ def test_eho_rejects_more_clans_than_agents():
     ("optimizer", "state_names"),
     [
         (ABC(), ("trial",)),
-        (AF(), ("branch",)),
+        (AF(), ("p_distance", "g_distance")),
         (BA(), ("velocity", "frequency", "loudness", "pulse_rate")),
         (CSA(), ("memory", "memory_fitness")),
-        (KH(), ("induced_motion", "foraging_motion")),
+        (KH(), ("motion", "foraging")),
         (MFO(), ("flames", "flame_fitness")),
         (PIO(), ("velocity",)),
         (PSO(), ("local_position", "local_fitness", "velocity")),
@@ -279,7 +278,7 @@ def test_compiled_floating_state_uses_population_dtype(optimizer, state_names):
         BWO(),
         CS(),
         CSA(),
-        EHO(),
+        EHO({"n_clans": 2}),
         FA(),
         FFOA(),
         FPA(),

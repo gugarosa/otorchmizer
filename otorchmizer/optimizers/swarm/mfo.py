@@ -12,15 +12,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class MFO(Optimizer):
@@ -39,13 +36,9 @@ class MFO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> MFO.")
-
         self.b = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def b(self) -> float:
@@ -56,7 +49,9 @@ class MFO(Optimizer):
     @b.setter
     def b(self, b: float) -> None:
         if not isinstance(b, (float, int)):
-            raise e.TypeError("`b` must be a float or integer.")
+            raise TypeError("`b` must be a float or integer.")
+        if not math.isfinite(b):
+            raise ValueError("`b` must be finite.")
         self._b = b
 
     def compile(self, population) -> None:
@@ -96,6 +91,7 @@ class MFO(Optimizer):
         for i in range(n_flames, n):
             flame_targets[i] = self.flames[n_flames - 1]
 
-        t_rand = torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * 2 - 1
+        lower = -1 - ctx.iteration / max(ctx.n_iterations, 1)
+        t_rand = lower + torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * (1 - lower)
         D = torch.abs(flame_targets - pop.positions)
         pop.positions = D * torch.exp(self.b * t_rand) * torch.cos(2 * torch.pi * t_rand) + flame_targets

@@ -9,11 +9,7 @@ from collections.abc import Callable
 
 import torch
 
-import otorchmizer.utils.exception as e
-from otorchmizer.core.function import Function
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
+from otorchmizer.core.function import Function, _reject_nan
 
 
 class ConstrainedFunction(Function):
@@ -49,24 +45,21 @@ class ConstrainedFunction(Function):
 
         """
 
-        logger.info("Creating class: ConstrainedFunction.")
-
         super().__init__(pointer, batch)
 
         self.constraints = [] if constraints is None else constraints
         self.penalty = penalty
 
         if not isinstance(self.constraints, list):
-            raise e.TypeError("`constraints` should be a list.")
+            raise TypeError("`constraints` should be a list.")
+        if not all(callable(constraint) for constraint in self.constraints):
+            raise TypeError("`constraints` must contain only callables.")
         if not isinstance(self.penalty, (float, int)):
-            raise e.TypeError("`penalty` should be a float or integer.")
+            raise TypeError("`penalty` should be a float or integer.")
         if self.penalty < 0:
-            raise e.ValueError("`penalty` should be >= 0.")
+            raise ValueError("`penalty` should be >= 0.")
 
-        self._constraint_functions = []
-
-        logger.debug("Constraints: %d | Penalty: %s.", len(self.constraints), self.penalty)
-        logger.info("Class created.")
+        self._constraint_functions = [Function(constraint, batch=self.batch) for constraint in self.constraints]
 
     def __call__(self, positions: torch.Tensor) -> torch.Tensor:
         """Evaluates fitness with constraint penalties.
@@ -76,6 +69,10 @@ class ConstrainedFunction(Function):
 
         Returns:
             Penalized fitness tensor of shape (n_agents,).
+
+        Raises:
+            ValueError: Eager objective or penalized fitness contains NaN.
+            RuntimeError: Compiled objective or penalized fitness contains NaN.
 
         """
 
@@ -90,6 +87,7 @@ class ConstrainedFunction(Function):
         for constraint in self._constraint_functions:
             satisfied = constraint(positions)
             mask = ~satisfied.bool()
-            fitness = fitness + mask.to(fitness.dtype) * self.penalty * fitness.abs()
+            fitness = torch.where(mask & (self.penalty != 0), fitness + self.penalty * fitness.abs(), fitness)
+        _reject_nan(fitness)
 
         return fitness

@@ -9,17 +9,14 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GA(Optimizer):
@@ -33,15 +30,11 @@ class GA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GA.")
-
         self.p_selection = 0.75
         self.p_mutation = 0.25
         self.p_crossover = 0.5
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def p_selection(self) -> float:
@@ -51,9 +44,11 @@ class GA(Optimizer):
 
     @p_selection.setter
     def p_selection(self, p_selection: float) -> None:
-        if not isinstance(p_selection, (float, int)):
-            raise e.TypeError("`p_selection` must be a float or integer.")
-        self._p_selection = p_selection
+        if not isinstance(p_selection, Real):
+            raise TypeError("`p_selection` must be a float or integer.")
+        if not 0 <= p_selection <= 1:
+            raise ValueError("`p_selection` must be between 0 and 1.")
+        self._p_selection = float(p_selection)
 
     @property
     def p_mutation(self) -> float:
@@ -63,9 +58,11 @@ class GA(Optimizer):
 
     @p_mutation.setter
     def p_mutation(self, p_mutation: float) -> None:
-        if not isinstance(p_mutation, (float, int)):
-            raise e.TypeError("`p_mutation` must be a float or integer.")
-        self._p_mutation = p_mutation
+        if not isinstance(p_mutation, Real):
+            raise TypeError("`p_mutation` must be a float or integer.")
+        if not 0 <= p_mutation <= 1:
+            raise ValueError("`p_mutation` must be between 0 and 1.")
+        self._p_mutation = float(p_mutation)
 
     @property
     def p_crossover(self) -> float:
@@ -75,9 +72,11 @@ class GA(Optimizer):
 
     @p_crossover.setter
     def p_crossover(self, p_crossover: float) -> None:
-        if not isinstance(p_crossover, (float, int)):
-            raise e.TypeError("`p_crossover` must be a float or integer.")
-        self._p_crossover = p_crossover
+        if not isinstance(p_crossover, Real):
+            raise TypeError("`p_crossover` must be a float or integer.")
+        if not 0 <= p_crossover <= 1:
+            raise ValueError("`p_crossover` must be between 0 and 1.")
+        self._p_crossover = float(p_crossover)
 
     def _roulette_selection(self, population: Population) -> torch.Tensor:
         n = population.n_agents

@@ -5,33 +5,23 @@
 
 References:
     S. H. S. Moosavi and V. K. Bardsiri.
-    Satin bowerbird optimizer: a new optimization algorithm to optimize
-    ANFIS for software development effort estimation.
+    Satin bowerbird optimizer: A new optimization algorithm to optimize ANFIS.
     Engineering Applications of Artificial Intelligence (2017).
 
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SBO(Optimizer):
-    """Satin Bowerbird Optimizer.
-
-    Notes:
-        Probability-based attraction and mutation.
-
-    """
+    """Satin Bowerbird Optimizer."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -41,56 +31,66 @@ class SBO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> SBO.")
-
-        self.alpha = 0.94
+        self.alpha = 0.9
         self.p_mutation = 0.05
         self.z = 0.02
 
         super().__init__(params)
 
-        logger.info("Class overrided.")
-
     @property
     def alpha(self) -> float:
-        """Return the randomization coefficient."""
+        """Return the attraction coefficient."""
 
         return self._alpha
 
     @alpha.setter
     def alpha(self, alpha: float) -> None:
-        if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
-        self._alpha = alpha
+        self._alpha = self._validate_nonnegative("alpha", alpha)
 
     @property
     def p_mutation(self) -> float:
-        """Return the mutation probability."""
+        """Return the per-variable mutation probability."""
 
         return self._p_mutation
 
     @p_mutation.setter
-    def p_mutation(self, p_mutation: float) -> None:
-        if not isinstance(p_mutation, (float, int)):
-            raise e.TypeError("`p_mutation` must be a float or integer.")
-        if not 0 <= p_mutation <= 1:
-            raise e.ValueError("`p_mutation` must be between 0 and 1.")
-        self._p_mutation = p_mutation
+    def p_mutation(self, value: float) -> None:
+        if not isinstance(value, (float, int)):
+            raise TypeError("`p_mutation` must be a float or integer.")
+        if not 0 <= value <= 1:
+            raise ValueError("`p_mutation` must be between 0 and 1.")
+        self._p_mutation = value
 
     @property
     def z(self) -> float:
-        """Return the mutation scale."""
+        """Return the mutation-scale coefficient."""
 
         return self._z
 
     @z.setter
-    def z(self, z: float) -> None:
-        if not isinstance(z, (float, int)):
-            raise e.TypeError("`z` must be a float or integer.")
-        self._z = z
+    def z(self, value: float) -> None:
+        self._z = self._validate_nonnegative("z", value)
+
+    @staticmethod
+    def _validate_nonnegative(name: str, value: float) -> float:
+        if not isinstance(value, (float, int)):
+            raise TypeError(f"`{name}` must be a float or integer.")
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"`{name}` must be finite and non-negative.")
+        return value
+
+    def compile(self, population) -> None:
+        """Initialize per-variable Gaussian mutation scales.
+
+        Args:
+            population: Population that defines mutation bounds and dtype.
+
+        """
+
+        self.sigma = self.z * (population.ub - population.lb)
 
     def update(self, ctx: UpdateContext) -> None:
-        """Advance the population by one optimization step.
+        """Advance the population by one attraction and mutation cycle.
 
         Args:
             ctx: Population, objective function, and iteration state.
@@ -98,32 +98,36 @@ class SBO(Optimizer):
         """
 
         pop = ctx.space.population
-        fn = ctx.function
-        device = pop.device
-        n = pop.n_agents
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
+        transformed = torch.where(
+            pop.fitness >= 0,
+            1 / (1 + pop.fitness),
+            1 + pop.fitness.abs(),
+        )
+        probabilities = transformed / transformed.sum()
+        partners = torch.multinomial(probabilities, pop.n_agents, replacement=True)
+        attraction = self.alpha / (1 + probabilities[partners])
+        candidates = pop.positions + attraction[:, None, None] * (
+            (pop.positions[partners] + pop.best_position.unsqueeze(0)) / 2 - pop.positions
+        )
 
-        max_fit = pop.fitness.max()
-        probs = max_fit - pop.fitness + c.EPSILON
-        probs = probs / probs.sum()
-
-        new_positions = pop.positions.clone()
-
-        for i in range(n):
-            j = torch.multinomial(probs, 1).item()
-            lam = self.alpha / (1 + probs[i])
-
-            new_positions[i] = pop.positions[i] + lam * ((pop.positions[j] + pop.best_position) / 2 - pop.positions[i])
-
-        mut_mask = torch.rand(n, pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype) < self.p_mutation
-        sigma = self.z * (ub - lb)
-        noise = torch.randn_like(new_positions) * sigma
-        new_positions = torch.where(mut_mask, new_positions + noise, new_positions)
-
-        new_positions = new_positions.clamp(min=lb, max=ub)
-        new_fitness = fn(new_positions)
-
-        improved = new_fitness < pop.fitness
-        pop.positions[improved] = new_positions[improved]
-        pop.fitness[improved] = new_fitness[improved]
+        mutation = (
+            torch.rand(
+                pop.n_agents,
+                pop.n_variables,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
+            )
+            < self.p_mutation
+        )
+        noise = torch.randn(
+            pop.n_agents,
+            pop.n_variables,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        ) * self.sigma.unsqueeze(0)
+        candidates = torch.where(mutation, candidates + noise, candidates)
+        pop.positions = candidates.clamp(min=pop.lb.unsqueeze(0), max=pop.ub.unsqueeze(0))
+        pop.fitness = ctx.function(pop.positions)
+        pop.update_best()

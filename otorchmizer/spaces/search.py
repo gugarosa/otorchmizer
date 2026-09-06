@@ -8,9 +8,6 @@ from __future__ import annotations
 import torch
 
 from otorchmizer.core.space import Space
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SearchSpace(Space):
@@ -24,6 +21,7 @@ class SearchSpace(Space):
         upper_bound: float | list[float] | tuple[float, ...] | torch.Tensor,
         mapping: list[str] | None = None,
         device: str | torch.device = "auto",
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize a continuous search space.
 
@@ -34,13 +32,12 @@ class SearchSpace(Space):
             upper_bound: Upper bound for each decision variable.
             mapping: Human-readable names for the decision variables.
             device: Device used to store population tensors.
+            dtype: Storage dtype, or None to use the PyTorch default.
 
         Notes:
             Agent positions are initialized uniformly within the supplied bounds.
 
         """
-
-        logger.info("Creating class: SearchSpace.")
 
         super().__init__(
             n_agents=n_agents,
@@ -50,11 +47,10 @@ class SearchSpace(Space):
             upper_bound=upper_bound,
             mapping=mapping,
             device=device,
+            dtype=dtype,
         )
 
         self.build()
-
-        logger.info("Class created.")
 
     def _initialize(self) -> None:
         self.population.initialize_uniform()

@@ -6,7 +6,6 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.population import Population
 from otorchmizer.core.space import Space
@@ -81,14 +80,14 @@ def test_loa_defaults_and_parameter_validation():
     assert (optimizer.I, optimizer.Ma, optimizer.Mu) == (0.4, 0.3, 0.2)
 
     for name in ("N", "S", "R", "I", "Ma", "Mu"):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             setattr(optimizer, name, "invalid")
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             setattr(optimizer, name, 1.1)
 
-    with pytest.raises(e.TypeError):
+    with pytest.raises(TypeError):
         optimizer.P = 1.5
-    with pytest.raises(e.ValueError):
+    with pytest.raises(ValueError):
         optimizer.P = 0
 
 
@@ -111,13 +110,13 @@ def test_compile_creates_exact_device_local_demographics_and_rejects_small_popul
         assert (members & optimizer.female).sum().item() == 3
         assert (members & ~optimizer.female).sum().item() == 1
 
-    with pytest.raises(e.ValueError, match="at least 2 nomad"):
+    with pytest.raises(ValueError, match="at least 2 nomad"):
         LOA({"P": 1, "N": 0.1}).compile(_population(n_agents=10))
-    with pytest.raises(e.ValueError, match="at least 2 lions per pride"):
+    with pytest.raises(ValueError, match="at least 2 lions per pride"):
         LOA().compile(_population(n_agents=9))
 
 
-def test_hunting_uses_hunters_for_prey_and_highest_cost_group_as_center(monkeypatch):
+def test_hunting_uses_hunters_for_prey_and_lowest_cost_group_as_center(monkeypatch):
     population = _population(n_agents=6, n_variables=1, n_dimensions=1, lower=-200, upper=200)
     positions = population.positions.new_tensor([8.0, 2.0, 0.0, 100.0, 10.0, 20.0])
     lions = _batch(population, positions, [True, True, True, False, True, False], [0, 0, 0, 0, -1, -1])
@@ -139,7 +138,7 @@ def test_hunting_uses_hunters_for_prey_and_highest_cost_group_as_center(monkeypa
 
     optimizer._hunting(lions, population, Function(_sphere))
 
-    expected = population.positions.new_tensor([17 / 3, 4, 5, 100, 10, 20]).reshape_as(lions.positions)
+    expected = population.positions.new_tensor([1, 4, 5 / 3, 100, 10, 20]).reshape_as(lions.positions)
     torch.testing.assert_close(lions.positions, expected)
     assert lions.group.tolist() == [1, 2, 3, 0, 0, 0]
     torch.testing.assert_close(lions.fitness, torch.vmap(_sphere)(lions.positions))

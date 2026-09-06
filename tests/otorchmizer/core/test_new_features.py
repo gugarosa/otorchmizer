@@ -1,7 +1,9 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Tests for new core features: multi-GPU, mixed-precision, CUDA Graphs, torch.compile."""
+"""Tests for device, precision, graph-capture, and compilation contracts."""
+
+import sys
 
 import pytest
 import torch
@@ -11,6 +13,7 @@ from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
 from otorchmizer.core.space import Space
+from otorchmizer.optimizers.swarm import PSO
 
 
 class TestDeviceManagerDtype:
@@ -241,6 +244,10 @@ class TestOptimizerCallDispatch:
         assert "compiled=True" in repr(opt)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32" and torch.__version__.startswith("2.0."),
+    reason="Torch 2.0 does not support torch.compile on Windows.",
+)
 class TestTorchCompile:
     def test_torch_compile_sets_attribute(self):
         class SimpleOpt(Optimizer):
@@ -270,8 +277,6 @@ class TestTorchCompile:
 
 class TestIntegrationNewFeatures:
     def test_population_dtype_in_optimizer(self):
-        from otorchmizer.optimizers.swarm import PSO
-
         fn = Function(lambda x: (x**2).sum(dim=(-1, -2)))
         lb = torch.zeros(3)
         ub = torch.ones(3) * 5

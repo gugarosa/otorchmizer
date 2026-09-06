@@ -15,11 +15,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class EO(Optimizer):
@@ -38,16 +34,12 @@ class EO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> EO.")
-
         self.a1 = 2.0
         self.a2 = 1.0
         self.GP = 0.5
         self.V = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def a1(self) -> float:
@@ -73,7 +65,7 @@ class EO(Optimizer):
         """
 
         if not isinstance(a1, (float, int)):
-            raise e.TypeError("`a1` must be a float or integer.")
+            raise TypeError("`a1` must be a float or integer.")
         self._a1 = a1
 
     @property
@@ -100,7 +92,7 @@ class EO(Optimizer):
         """
 
         if not isinstance(a2, (float, int)):
-            raise e.TypeError("`a2` must be a float or integer.")
+            raise TypeError("`a2` must be a float or integer.")
         self._a2 = a2
 
     @property
@@ -128,9 +120,9 @@ class EO(Optimizer):
         """
 
         if not isinstance(GP, (float, int)):
-            raise e.TypeError("`GP` must be a float or integer.")
+            raise TypeError("`GP` must be a float or integer.")
         if not 0 <= GP <= 1:
-            raise e.ValueError("`GP` must be between 0 and 1.")
+            raise ValueError("`GP` must be between 0 and 1.")
         self._GP = GP
 
     @property
@@ -158,9 +150,9 @@ class EO(Optimizer):
         """
 
         if not isinstance(V, (float, int)):
-            raise e.TypeError("`V` must be a float or integer.")
+            raise TypeError("`V` must be a float or integer.")
         if V <= 0:
-            raise e.ValueError("`V` must be positive.")
+            raise ValueError("`V` must be positive.")
         self._V = V
 
     def compile(self, population) -> None:

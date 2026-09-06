@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import torch
 
-import otorchmizer.utils.exception as e
-
 
 class Node:
     """A binary-tree node for composing GP expression trees.
@@ -81,7 +79,7 @@ class Node:
     @name.setter
     def name(self, name: str | int) -> None:
         if not isinstance(name, (str, int)):
-            raise e.TypeError("`name` should be a string or integer.")
+            raise TypeError("`name` should be a string or integer.")
         self._name = name
 
     @property
@@ -93,7 +91,7 @@ class Node:
     @category.setter
     def category(self, category: str) -> None:
         if category not in ("TERMINAL", "FUNCTION"):
-            raise e.ValueError("`category` should be 'TERMINAL' or 'FUNCTION'.")
+            raise ValueError("`category` should be 'TERMINAL' or 'FUNCTION'.")
         self._category = category
 
     @property
@@ -108,7 +106,7 @@ class Node:
             self._value = None
         else:
             if not isinstance(value, torch.Tensor):
-                raise e.TypeError("`value` should be a torch.Tensor.")
+                raise TypeError("`value` should be a torch.Tensor.")
             self._value = value
 
     @property
@@ -120,7 +118,7 @@ class Node:
     @left.setter
     def left(self, left: Node | None) -> None:
         if left is not None and not isinstance(left, Node):
-            raise e.TypeError("`left` should be a Node.")
+            raise TypeError("`left` should be a Node.")
         self._left = left
 
     @property
@@ -132,7 +130,7 @@ class Node:
     @right.setter
     def right(self, right: Node | None) -> None:
         if right is not None and not isinstance(right, Node):
-            raise e.TypeError("`right` should be a Node.")
+            raise TypeError("`right` should be a Node.")
         self._right = right
 
     @property
@@ -144,7 +142,7 @@ class Node:
     @parent.setter
     def parent(self, parent: Node | None) -> None:
         if parent is not None and not isinstance(parent, Node):
-            raise e.TypeError("`parent` should be a Node.")
+            raise TypeError("`parent` should be a Node.")
         self._parent = parent
 
     @property
@@ -156,7 +154,7 @@ class Node:
     @flag.setter
     def flag(self, flag: bool) -> None:
         if not isinstance(flag, bool):
-            raise e.TypeError("`flag` should be a boolean.")
+            raise TypeError("`flag` should be a boolean.")
         self._flag = flag
 
     @property
@@ -315,9 +313,9 @@ def _evaluate_node(node: Node | None) -> tuple[torch.Tensor | None, torch.Tensor
         return node.value, torch.isfinite(node.value).all()
 
     if x is None:
-        raise e.ValueError("`node.left` should be defined for a function node.")
+        raise ValueError("`node.left` should be defined for a function node.")
     if node.name in ("SUM", "SUB", "MUL", "DIV") and y is None:
-        raise e.ValueError("`node.right` should be defined for a binary function node.")
+        raise ValueError("`node.right` should be defined for a binary function node.")
 
     if node.name == "SUM":
         result = x + y
@@ -350,7 +348,7 @@ def _evaluate_node(node: Node | None) -> tuple[torch.Tensor | None, torch.Tensor
     elif node.name == "COS":
         result = torch.cos(x)
     else:
-        raise e.ValueError(f"`node.name={node.name}` should identify a supported function.")
+        raise ValueError(f"`node.name={node.name}` should identify a supported function.")
 
     valid = x_valid & torch.isfinite(result).all()
     if y_valid is not None:

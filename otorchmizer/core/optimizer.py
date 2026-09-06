@@ -5,12 +5,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class UpdateContext:
     """Shared optimization state passed to each update.
 
@@ -35,6 +35,8 @@ class UpdateContext:
     Notes:
         Every optimizer receives the same context and uses only the fields it needs.
         Explicit fields replace signature inspection and dynamic argument wiring.
+        Fields are read-only snapshots, but referenced space and objective state remain live.
+        The driver refreshes the snapshot after before-update callbacks.
 
     """
 
@@ -53,7 +55,7 @@ class Optimizer:
 
     """
 
-    def __init__(self, params: dict[str, Any] | None = None) -> None:
+    def __init__(self, params: Mapping[str, Any] | None = None) -> None:
         """Initialize algorithm metadata and apply parameter overrides.
 
         Args:
@@ -61,6 +63,8 @@ class Optimizer:
 
         """
 
+        if params is not None and not isinstance(params, Mapping):
+            raise TypeError("`params` must be a mapping.")
         self.algorithm = self.__class__.__name__
         self.params = {}
         self.built = False
@@ -77,7 +81,7 @@ class Optimizer:
     @algorithm.setter
     def algorithm(self, algorithm: str) -> None:
         if not isinstance(algorithm, str):
-            raise e.TypeError("`algorithm` should be a string.")
+            raise TypeError("`algorithm` should be a string.")
         self._algorithm = algorithm
 
     @property
@@ -99,10 +103,10 @@ class Optimizer:
     @params.setter
     def params(self, params: dict[str, Any]) -> None:
         if not isinstance(params, dict):
-            raise e.TypeError("`params` should be a dictionary.")
+            raise TypeError("`params` should be a dictionary.")
         self._params = params
 
-    def build(self, params: dict[str, Any] | None = None) -> None:
+    def build(self, params: Mapping[str, Any] | None = None) -> None:
         """Builds the optimizer by applying parameter overrides.
 
         Args:
@@ -110,19 +114,19 @@ class Optimizer:
 
         """
 
-        if params:
+        if params is not None and not isinstance(params, Mapping):
+            raise TypeError("`params` must be a mapping.")
+        if params is not None:
             self.params.update(params)
             for k, v in params.items():
                 setattr(self, k, v)
 
         self.built = True
 
-        logger.debug(
-            "Algorithm: %s | Custom Parameters: %s | Built: %s.",
-            self.algorithm,
-            str(params),
-            self.built,
-        )
+    def __getstate__(self) -> dict[str, Any]:
+        state = self.__dict__.copy()
+        state["_compiled_update"] = None
+        return state
 
     def bind(self, space: Space) -> None:
         """Binds optional space-owned state before optimizer compilation.
@@ -193,6 +197,8 @@ class Optimizer:
             The engine uses this entry point, while direct update(ctx) calls remain eager.
             The compile mode is "reduce-overhead" unless explicitly overridden.
             Performance depends on the algorithm, backend, workload, and hardware.
+            Checkpoints discard compiled dispatch without recompiling or resetting restored strategy buffers.
+            Re-enable compilation explicitly after loading. Torch 2.0 does not support compilation on Windows.
 
         Examples:
             Compile optimizer dispatch after allocating algorithm state::

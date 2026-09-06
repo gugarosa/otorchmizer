@@ -11,16 +11,13 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.math.general as g
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class OSA(Optimizer):
@@ -34,13 +31,9 @@ class OSA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> OSA.")
-
         self.beta = 1.9
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def beta(self) -> float:
@@ -50,9 +43,11 @@ class OSA(Optimizer):
 
     @beta.setter
     def beta(self, beta: float) -> None:
-        if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
-        self._beta = beta
+        if not isinstance(beta, Real):
+            raise TypeError("`beta` must be a float or integer.")
+        if beta < 0:
+            raise ValueError("`beta` must be non-negative.")
+        self._beta = float(beta)
 
     def update(self, ctx: UpdateContext) -> None:
         """Move owls according to normalized intensity and prey distance.

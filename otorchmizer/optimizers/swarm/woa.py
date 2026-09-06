@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class WOA(Optimizer):
@@ -40,13 +36,9 @@ class WOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> WOA.")
-
         self.b = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def b(self) -> float:
@@ -57,7 +49,7 @@ class WOA(Optimizer):
     @b.setter
     def b(self, b: float) -> None:
         if not isinstance(b, (float, int)):
-            raise e.TypeError("`b` must be a float or integer.")
+            raise TypeError("`b` must be a float or integer.")
         self._b = b
 
     def update(self, ctx: UpdateContext) -> None:

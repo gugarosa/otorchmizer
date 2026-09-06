@@ -15,11 +15,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SA(Optimizer):
@@ -38,14 +34,10 @@ class SA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> SA.")
-
         self.T = 100.0
         self.beta = 0.999
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def T(self) -> float:
@@ -71,7 +63,7 @@ class SA(Optimizer):
         """
 
         if not isinstance(T, (float, int)):
-            raise e.TypeError("`T` must be a float or integer.")
+            raise TypeError("`T` must be a float or integer.")
         self._T = T
 
     @property
@@ -98,7 +90,7 @@ class SA(Optimizer):
         """
 
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
         self._beta = beta
 
     def update(self, ctx: UpdateContext) -> None:

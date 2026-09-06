@@ -17,11 +17,7 @@ import torch
 
 import otorchmizer.math.distribution as d
 import otorchmizer.math.general as g
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class PPA(Optimizer):
@@ -35,11 +31,7 @@ class PPA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> PPA.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def compile(self, population) -> None:
         """Initialize cat velocities and validate population cardinality.
@@ -53,7 +45,7 @@ class PPA(Optimizer):
         """
 
         if population.n_agents < 2:
-            raise e.ValueError("`population.n_agents` must be at least 2.")
+            raise ValueError("`population.n_agents` must be at least 2.")
 
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
         self.velocity = torch.zeros(shape, device=population.device, dtype=population.dtype)

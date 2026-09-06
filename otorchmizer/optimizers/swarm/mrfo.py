@@ -13,15 +13,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class MRFO(Optimizer):
@@ -40,13 +37,9 @@ class MRFO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> MRFO.")
-
         self.S = 2.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def S(self) -> float:
@@ -57,7 +50,9 @@ class MRFO(Optimizer):
     @S.setter
     def S(self, S: float) -> None:
         if not isinstance(S, (float, int)):
-            raise e.TypeError("`S` must be a float or integer.")
+            raise TypeError("`S` must be a float or integer.")
+        if not math.isfinite(S) or S < 0:
+            raise ValueError("`S` must be finite and non-negative.")
         self._S = S
 
     def update(self, ctx: UpdateContext) -> None:
@@ -119,28 +114,33 @@ class MRFO(Optimizer):
                             + beta * (best.squeeze(0) - pop.positions[i])
                         )
             else:
-                r = torch.rand(1, device=device, dtype=pop.dtype)
-                alpha = 2 * r * torch.sqrt(torch.abs(torch.log(r + 1e-10)))
+                alpha_random = torch.rand(1, device=device, dtype=pop.dtype)
+                movement_random = torch.rand(1, device=device, dtype=pop.dtype)
+                alpha = (
+                    2
+                    * alpha_random
+                    * torch.sqrt(torch.abs(torch.log(alpha_random.clamp_min(torch.finfo(pop.dtype).tiny))))
+                )
 
                 if i == 0:
                     new_pos = (
                         pop.positions[i]
-                        + r * (best.squeeze(0) - pop.positions[i])
+                        + movement_random * (best.squeeze(0) - pop.positions[i])
                         + alpha * (best.squeeze(0) - pop.positions[i])
                     )
                 else:
                     new_pos = (
                         pop.positions[i]
-                        + r * (pop.positions[i - 1] - pop.positions[i])
+                        + movement_random * (pop.positions[i - 1] - pop.positions[i])
                         + alpha * (best.squeeze(0) - pop.positions[i])
                     )
 
             new_pos = new_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))
             new_fit = fn(new_pos.unsqueeze(0))[0]
-
-            if new_fit < pop.fitness[i]:
-                pop.positions[i] = new_pos
-                pop.fitness[i] = new_fit
+            pop.positions[i] = new_pos
+            pop.fitness[i] = new_fit
+            pop.update_best()
+            best = pop.best_position.unsqueeze(0)
 
         r1 = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
         r2 = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
@@ -148,6 +148,6 @@ class MRFO(Optimizer):
         new_positions = new_positions.clamp(min=lb, max=ub)
 
         new_fitness = fn(new_positions)
-        improved = new_fitness < pop.fitness
-        pop.positions[improved] = new_positions[improved]
-        pop.fitness[improved] = new_fitness[improved]
+        pop.positions = new_positions
+        pop.fitness = new_fitness
+        pop.update_best()

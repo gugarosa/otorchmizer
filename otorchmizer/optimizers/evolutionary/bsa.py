@@ -11,15 +11,12 @@ References:
 
 from __future__ import annotations
 
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class BSA(Optimizer):
@@ -33,14 +30,10 @@ class BSA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> BSA.")
-
         self.F = 3.0
         self.mix_rate = 1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def F(self) -> float:
@@ -50,9 +43,9 @@ class BSA(Optimizer):
 
     @F.setter
     def F(self, F: float) -> None:
-        if not isinstance(F, (float, int)):
-            raise e.TypeError("`F` must be a float or integer.")
-        self._F = F
+        if not isinstance(F, Real):
+            raise TypeError("`F` must be a float or integer.")
+        self._F = float(F)
 
     @property
     def mix_rate(self) -> int:
@@ -62,11 +55,11 @@ class BSA(Optimizer):
 
     @mix_rate.setter
     def mix_rate(self, mix_rate: int) -> None:
-        if not isinstance(mix_rate, int):
-            raise e.TypeError("`mix_rate` must be an integer.")
+        if not isinstance(mix_rate, Integral):
+            raise TypeError("`mix_rate` must be an integer.")
         if mix_rate < 0:
-            raise e.ValueError("`mix_rate` must be non-negative.")
-        self._mix_rate = mix_rate
+            raise ValueError("`mix_rate` must be non-negative.")
+        self._mix_rate = int(mix_rate)
 
     def compile(self, population) -> None:
         """Initialize the historical population.

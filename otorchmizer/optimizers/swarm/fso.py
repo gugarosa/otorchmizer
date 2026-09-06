@@ -18,11 +18,7 @@ from typing import Any
 import torch
 
 import otorchmizer.math.distribution as d
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class FSO(Optimizer):
@@ -36,13 +32,9 @@ class FSO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> FSO.")
-
         self.beta = 0.5
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def beta(self) -> float:
@@ -53,9 +45,9 @@ class FSO(Optimizer):
     @beta.setter
     def beta(self, beta: float) -> None:
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
         if not 0 < beta <= 2:
-            raise e.ValueError("`beta` must be greater than 0 and at most 2.")
+            raise ValueError("`beta` must be greater than 0 and at most 2.")
         self._beta = beta
 
     def update(self, ctx: UpdateContext) -> None:

@@ -11,15 +11,12 @@ References:
 
 from __future__ import annotations
 
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class FOA(Optimizer):
@@ -33,8 +30,6 @@ class FOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> FOA.")
-
         self.life_time = 6
         self.area_limit = 30
         self.LSC = 1
@@ -42,8 +37,6 @@ class FOA(Optimizer):
         self.transfer_rate = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def life_time(self) -> int:
@@ -53,11 +46,11 @@ class FOA(Optimizer):
 
     @life_time.setter
     def life_time(self, life_time: int) -> None:
-        if not isinstance(life_time, int):
-            raise e.TypeError("`life_time` must be an integer.")
+        if not isinstance(life_time, Integral):
+            raise TypeError("`life_time` must be an integer.")
         if life_time <= 0:
-            raise e.ValueError("`life_time` must be positive.")
-        self._life_time = life_time
+            raise ValueError("`life_time` must be positive.")
+        self._life_time = int(life_time)
 
     @property
     def area_limit(self) -> int:
@@ -67,11 +60,11 @@ class FOA(Optimizer):
 
     @area_limit.setter
     def area_limit(self, area_limit: int) -> None:
-        if not isinstance(area_limit, int):
-            raise e.TypeError("`area_limit` must be an integer.")
+        if not isinstance(area_limit, Integral):
+            raise TypeError("`area_limit` must be an integer.")
         if area_limit <= 0:
-            raise e.ValueError("`area_limit` must be positive.")
-        self._area_limit = area_limit
+            raise ValueError("`area_limit` must be positive.")
+        self._area_limit = int(area_limit)
 
     @property
     def LSC(self) -> int:
@@ -81,11 +74,11 @@ class FOA(Optimizer):
 
     @LSC.setter
     def LSC(self, LSC: int) -> None:
-        if not isinstance(LSC, int):
-            raise e.TypeError("`LSC` must be an integer.")
+        if not isinstance(LSC, Integral):
+            raise TypeError("`LSC` must be an integer.")
         if LSC <= 0:
-            raise e.ValueError("`LSC` must be positive.")
-        self._LSC = LSC
+            raise ValueError("`LSC` must be positive.")
+        self._LSC = int(LSC)
 
     @property
     def GSC(self) -> int:
@@ -95,11 +88,11 @@ class FOA(Optimizer):
 
     @GSC.setter
     def GSC(self, GSC: int) -> None:
-        if not isinstance(GSC, int):
-            raise e.TypeError("`GSC` must be an integer.")
+        if not isinstance(GSC, Integral):
+            raise TypeError("`GSC` must be an integer.")
         if GSC <= 0:
-            raise e.ValueError("`GSC` must be positive.")
-        self._GSC = GSC
+            raise ValueError("`GSC` must be positive.")
+        self._GSC = int(GSC)
 
     @property
     def transfer_rate(self) -> float:
@@ -109,11 +102,11 @@ class FOA(Optimizer):
 
     @transfer_rate.setter
     def transfer_rate(self, transfer_rate: float) -> None:
-        if not isinstance(transfer_rate, (float, int)):
-            raise e.TypeError("`transfer_rate` must be a float or integer.")
+        if not isinstance(transfer_rate, Real):
+            raise TypeError("`transfer_rate` must be a float or integer.")
         if not 0 <= transfer_rate <= 1:
-            raise e.ValueError("`transfer_rate` must be between 0 and 1.")
-        self._transfer_rate = transfer_rate
+            raise ValueError("`transfer_rate` must be between 0 and 1.")
+        self._transfer_rate = float(transfer_rate)
 
     def compile(self, population) -> None:
         """Initialize tree ages.
