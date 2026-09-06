@@ -1,16 +1,17 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for new core features: multi-GPU, mixed-precision, CUDA Graphs, torch.compile."""
 
 import pytest
 import torch
 
-from otorchmizer.core.device import CUDAGraphRunner, DeviceManager
-from otorchmizer.core.population import Population
-from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.function import Function
+from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.population import Population
 from otorchmizer.core.space import Space
 
-
-# ─── DeviceManager new features ───────────────────────────────────
 
 class TestDeviceManagerDtype:
     def test_default_dtype(self):
@@ -77,12 +78,12 @@ class TestDeviceManagerScatterGather:
 
 
 class TestDeviceManagerAutocast:
-    def test_autocast_cpu_noop(self):
+    def test_autocast_cpu_bfloat16(self):
         dm = DeviceManager("cpu")
         with dm.autocast():
             t = torch.randn(3, 3) @ torch.randn(3, 3)
-        # No error — CPU autocast is a no-op in our implementation
         assert t.shape == (3, 3)
+        assert t.dtype == torch.bfloat16
 
     def test_autocast_disabled(self):
         dm = DeviceManager("cpu")
@@ -102,8 +103,6 @@ class TestCUDAGraphsAvailability:
         with pytest.raises(RuntimeError, match="CUDA"):
             DeviceManager.capture_graph(lambda x: x.add_(1), torch.randn(3))
 
-
-# ─── Population new features ──────────────────────────────────────
 
 class TestPopulationDtype:
     def test_default_dtype(self):
@@ -218,11 +217,8 @@ class TestPopulationRepr:
         assert "float64" in r
 
 
-# ─── Optimizer new features ───────────────────────────────────────
-
 class TestOptimizerCallDispatch:
     def test_call_dispatches_to_update(self):
-        """__call__ should invoke update when no compiled update exists."""
         calls = []
 
         class DummyOpt(Optimizer):
@@ -272,14 +268,11 @@ class TestTorchCompile:
         assert len(calls) >= 1
 
 
-# ─── Integration: end-to-end with new features ───────────────────
-
 class TestIntegrationNewFeatures:
     def test_population_dtype_in_optimizer(self):
-        """Optimizer works with float64 population."""
         from otorchmizer.optimizers.swarm import PSO
 
-        fn = Function(lambda x: (x ** 2).sum(dim=(-1, -2)))
+        fn = Function(lambda x: (x**2).sum(dim=(-1, -2)))
         lb = torch.zeros(3)
         ub = torch.ones(3) * 5
         space = Space(n_agents=10, n_variables=3, lower_bound=lb, upper_bound=ub)
@@ -298,7 +291,6 @@ class TestIntegrationNewFeatures:
         assert space.population.best_fitness.item() < 100
 
     def test_scatter_gather_roundtrip(self):
-        """Population survives scatter→update→gather cycle."""
         lb = torch.zeros(3)
         ub = torch.ones(3) * 5
         pop = Population(20, 3, 1, lb, ub)

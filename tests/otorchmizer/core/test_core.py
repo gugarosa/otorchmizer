@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for core modules: Population, Space, Function, Optimizer."""
 
 import pytest
@@ -113,14 +116,15 @@ class TestAgentView:
 
 class TestFunction:
     def test_single_agent_function(self):
-        fn = Function(lambda x: (x ** 2).sum())
+        fn = Function(lambda x: (x**2).sum())
         positions = torch.rand(10, 3, 1)
         result = fn(positions)
         assert result.shape == (10,)
 
     def test_batch_function(self):
         def batch_fn(positions):
-            return (positions ** 2).sum(dim=(1, 2))
+            return (positions**2).sum(dim=(1, 2))
+
         fn = Function(batch_fn, batch=True)
         positions = torch.rand(10, 3, 1)
         result = fn(positions)
@@ -128,22 +132,21 @@ class TestFunction:
 
     def test_name_detection(self):
         def sphere(x):
-            return (x ** 2).sum()
+            return (x**2).sum()
+
         fn = Function(sphere)
         assert fn.name == "sphere"
 
 
 class TestSpace:
     def test_build(self):
-        space = Space(n_agents=10, n_variables=3, lower_bound=[-1, -1, -1],
-                      upper_bound=[1, 1, 1], device="cpu")
+        space = Space(n_agents=10, n_variables=3, lower_bound=[-1, -1, -1], upper_bound=[1, 1, 1], device="cpu")
         space.build()
         assert space.built
         assert space.population.positions.shape == (10, 3, 1)
 
     def test_clip(self):
-        space = Space(n_agents=5, n_variables=2, lower_bound=[0, 0],
-                      upper_bound=[1, 1], device="cpu")
+        space = Space(n_agents=5, n_variables=2, lower_bound=[0, 0], upper_bound=[1, 1], device="cpu")
         space.build()
         space.population.positions.fill_(5.0)
         space.clip()
@@ -158,7 +161,7 @@ class TestOptimizer:
         assert opt.algorithm == "Optimizer"
 
     def test_base_evaluate(self):
-        fn = Function(lambda x: (x ** 2).sum())
+        fn = Function(lambda x: (x**2).sum())
         lb = torch.tensor([-1.0, -1.0])
         ub = torch.tensor([1.0, 1.0])
         pop = Population(10, 2, 1, lb, ub)

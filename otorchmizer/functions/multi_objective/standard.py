@@ -1,8 +1,11 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Standard multi-objective function wrapper."""
 
 from __future__ import annotations
 
-from typing import List
+from collections.abc import Callable
 
 import torch
 
@@ -16,22 +19,27 @@ logger = logging.get_logger(__name__)
 class MultiObjectiveFunction:
     """Wraps multiple objective functions.
 
-    Returns a tensor of shape (n_agents, n_objectives) containing
-    the fitness for each objective.
+    Notes:
+        Returns a tensor shaped (n_agents, n_objectives) containing the fitness for each objective.
+
     """
 
-    def __init__(self, functions: List[callable], batch: bool = False) -> None:
-        """Initialization method.
+    def __init__(self, functions: list[Callable], batch: bool = False) -> None:
+        """Wrap each objective with the same batching strategy.
 
         Args:
             functions: List of objective callables.
             batch: If True, callables handle full population tensors.
+
+        Raises:
+            TypeError: Functions are not a list or an objective is not callable.
+
         """
 
         logger.info("Creating class: MultiObjectiveFunction.")
 
         if not isinstance(functions, list):
-            raise e.TypeError("`functions` should be a list")
+            raise e.TypeError("`functions` should be a list.")
 
         self.functions = [Function(f, batch=batch) for f in functions]
         self.built = True
@@ -43,10 +51,11 @@ class MultiObjectiveFunction:
         """Evaluates all objectives.
 
         Args:
-            positions: (n_agents, n_variables, n_dimensions).
+            positions: Population tensor shaped (n_agents, n_variables, n_dimensions).
 
         Returns:
             Tensor of shape (n_agents, n_objectives).
+
         """
 
         return torch.stack([f(positions) for f in self.functions], dim=-1)

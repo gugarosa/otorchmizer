@@ -1,26 +1,30 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Convergence plots with tensor-to-numpy bridge."""
 
 from __future__ import annotations
 
-from typing import List, Optional
+from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 import otorchmizer.utils.exception as e
 
+PlotData = torch.Tensor | np.ndarray | Sequence[float]
 
-def _to_numpy(arg):
-    """Converts a tensor or array to numpy for matplotlib."""
 
+def _to_numpy(arg: PlotData) -> np.ndarray | Sequence[float]:
     if isinstance(arg, torch.Tensor):
         return arg.detach().cpu().numpy()
     return arg
 
 
 def plot(
-    *args,
-    labels: Optional[List[str]] = None,
+    *args: PlotData,
+    labels: list[str] | None = None,
     title: str = "",
     subtitle: str = "",
     xlabel: str = "iteration",
@@ -28,11 +32,10 @@ def plot(
     grid: bool = True,
     legend: bool = True,
 ) -> None:
-    """Plots convergence graphs of desired variables.
-
-    Each variable is a list, numpy array, or tensor with size n_iterations.
+    """Plot convergence graphs for one or more variables.
 
     Args:
+        *args: Lists, NumPy arrays, or tensors containing one value per iteration.
         labels: Labels for each plot line.
         title: Plot title.
         subtitle: Plot subtitle.
@@ -40,6 +43,14 @@ def plot(
         ylabel: Y-axis label.
         grid: Whether to display grid lines.
         legend: Whether to display legend.
+
+    Raises:
+        TypeError: If `labels` is not a list.
+        SizeError: If `labels` does not contain one entry per plotted variable.
+
+    Notes:
+        This function displays the pyplot window and returns None.
+
     """
 
     _, ax = plt.subplots(figsize=(7, 5))
@@ -53,9 +64,9 @@ def plot(
 
     if labels:
         if not isinstance(labels, list):
-            raise e.TypeError("`labels` should be a list")
+            raise e.TypeError("`labels` should be a list.")
         if len(labels) != len(args):
-            raise e.SizeError("`args` and `labels` should have the same size")
+            raise e.SizeError("`args` and `labels` should have the same size.")
     else:
         labels = [f"variable_{i}" for i in range(len(args))]
 

@@ -1,17 +1,21 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for visualization modules (convergence and surface).
 
 Matplotlib is configured to use 'Agg' backend for headless testing.
 """
 
-import pytest
 import matplotlib
+import pytest
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from otorchmizer.visualization import convergence, surface
 import otorchmizer.utils.exception as e
+from otorchmizer.visualization import convergence, surface
 
 
 class TestConvergencePlot:
@@ -46,9 +50,7 @@ class TestConvergencePlot:
         convergence.plot([1, 2, 3], legend=False)
 
     def test_custom_labels(self):
-        convergence.plot([1, 2], [3, 4], labels=["x", "y"],
-                        title="Title", subtitle="Sub",
-                        xlabel="step", ylabel="val")
+        convergence.plot([1, 2], [3, 4], labels=["x", "y"], title="Title", subtitle="Sub", xlabel="step", ylabel="val")
 
     def test_invalid_labels_type(self):
         with pytest.raises(e.TypeError):
@@ -67,14 +69,14 @@ class TestSurfacePlot:
         x = np.linspace(-1, 1, 10)
         y = np.linspace(-1, 1, 10)
         X, Y = np.meshgrid(x, y)
-        Z = X ** 2 + Y ** 2
+        Z = X**2 + Y**2
         surface.plot([X, Y, Z], title="Sphere")
 
     def test_tensor_input(self):
         x = torch.linspace(-1, 1, 10)
         y = torch.linspace(-1, 1, 10)
         X, Y = torch.meshgrid(x, y, indexing="ij")
-        Z = X ** 2 + Y ** 2
+        Z = X**2 + Y**2
         surface.plot([X, Y, Z], title="Sphere Tensor")
 
     def test_no_colorbar(self):

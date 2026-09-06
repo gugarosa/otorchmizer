@@ -1,9 +1,12 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for core.block — graph-based optimization building blocks."""
 
 import pytest
 
-from otorchmizer.core.block import Block, InputBlock, InnerBlock, OutputBlock, Cell
 import otorchmizer.utils.exception as e
+from otorchmizer.core.block import Block, Cell, InnerBlock, InputBlock, OutputBlock
 
 
 class TestBlock:

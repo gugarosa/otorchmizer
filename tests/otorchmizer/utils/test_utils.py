@@ -1,11 +1,14 @@
-"""Tests for utils — callback, history, logging, exception, constant."""
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
 
-import os
-import tempfile
+"""Tests for utils — callback, history, logging, exception, constant."""
 
 import pytest
 import torch
 
+import otorchmizer.utils.constant as c
+import otorchmizer.utils.exception as e
+from otorchmizer.utils import logging as log_module
 from otorchmizer.utils.callback import (
     Callback,
     CallbackVessel,
@@ -13,9 +16,6 @@ from otorchmizer.utils.callback import (
     DiscreteSearchCallback,
 )
 from otorchmizer.utils.history import History
-from otorchmizer.utils import logging as log_module
-import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 
 
 class TestCallback:
@@ -112,9 +112,9 @@ class TestDiscreteSearchCallback:
         cb.on_evaluate_before(pop, None)
 
         snapped = pop.positions.squeeze().tolist()
-        assert snapped[0] == 0.0   # 2.3 → 0.0
+        assert snapped[0] == 0.0  # 2.3 → 0.0
         assert snapped[1] == 10.0  # 7.8 → 10.0
-        assert snapped[2] == 5.0   # 4.6 → 5.0
+        assert snapped[2] == 5.0  # 4.6 → 5.0
 
 
 class TestHistory:

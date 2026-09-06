@@ -1,7 +1,11 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """AgentView — backward-compatible accessor into a Population row.
 
 Does NOT own data — it references the Population tensors.
 Use for debugging, inspection, and migration; never in hot loops.
+
 """
 
 from __future__ import annotations
@@ -17,16 +21,19 @@ if TYPE_CHECKING:
 class AgentView:
     """Lightweight, non-owning view into a single agent within a Population.
 
-    Provides attribute-style access to an agent's position and fitness
-    without extracting data from the batched tensor storage.
+    Notes:
+        Provides attribute-style access to an agent's position and fitness.
+        Positions reference batched storage, while reading fitness extracts a Python scalar.
+
     """
 
     def __init__(self, population: Population, index: int) -> None:
-        """Initialization method.
+        """Reference one row of the population without copying its tensors.
 
         Args:
             population: The population this agent belongs to.
             index: The row index of this agent in the population.
+
         """
 
         self._pop = population
@@ -72,18 +79,20 @@ class AgentView:
 
     @property
     def n_variables(self) -> int:
+        """Number of decision variables in the referenced population."""
+
         return self._pop.n_variables
 
     @property
     def n_dimensions(self) -> int:
+        """Number of dimensions per variable in the referenced population."""
+
         return self._pop.n_dimensions
 
     def clip_by_bound(self) -> None:
         """Clips this agent's position to bounds."""
 
-        self._pop.positions[self._idx] = self._pop.positions[self._idx].clamp(
-            min=self._pop.lb, max=self._pop.ub
-        )
+        self._pop.positions[self._idx] = self._pop.positions[self._idx].clamp(min=self._pop.lb, max=self._pop.ub)
 
     def __repr__(self) -> str:
         return f"AgentView(index={self._idx}, fit={self.fit:.6f})"

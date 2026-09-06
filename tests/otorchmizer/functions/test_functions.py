@@ -1,20 +1,21 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for functions — constrained and multi-objective wrappers."""
 
 import pytest
 import torch
 
-from otorchmizer.core.function import Function
+import otorchmizer.utils.exception as e
 from otorchmizer.functions.constrained import ConstrainedFunction
 from otorchmizer.functions.multi_objective.standard import MultiObjectiveFunction
 from otorchmizer.functions.multi_objective.weighted import MultiObjectiveWeightedFunction
-import otorchmizer.utils.exception as e
 
 
 class TestConstrainedFunction:
     def test_no_violation(self):
-        """All constraints satisfied → no penalty."""
         fn = ConstrainedFunction(
-            pointer=lambda x: (x ** 2).sum(),
+            pointer=lambda x: (x**2).sum(),
             constraints=[lambda x: torch.tensor(True)],
             penalty=100.0,
         )
@@ -23,8 +24,9 @@ class TestConstrainedFunction:
         assert result.shape == (5,)
 
     def test_penalty_applied_on_violation(self):
-        """Constraint always violated → penalty added."""
-        base_fn = lambda x: (x ** 2).sum()
+        def base_fn(x):
+            return (x**2).sum()
+
         satisfied_fn = ConstrainedFunction(
             pointer=base_fn,
             constraints=[lambda x: torch.tensor(True)],
@@ -42,12 +44,11 @@ class TestConstrainedFunction:
         assert (fit_bad >= fit_ok).all()
 
     def test_batch_constraint(self):
-        """Batch constraint returning bool tensor."""
         def batch_constraint(positions):
             return positions[:, 0, 0] > 0.5
 
         fn = ConstrainedFunction(
-            pointer=lambda x: (x ** 2).sum(),
+            pointer=lambda x: (x**2).sum(dim=(1, 2)),
             constraints=[batch_constraint],
             penalty=5.0,
             batch=True,
@@ -55,11 +56,13 @@ class TestConstrainedFunction:
         positions = torch.rand(10, 2, 1)
         result = fn(positions)
         assert result.shape == (10,)
+        base = (positions**2).sum(dim=(1, 2))
+        expected = base + (positions[:, 0, 0] <= 0.5).to(base.dtype) * 5.0 * base
+        torch.testing.assert_close(result, expected)
 
     def test_zero_penalty(self):
-        """Zero penalty → violation has no effect."""
         fn = ConstrainedFunction(
-            pointer=lambda x: (x ** 2).sum(),
+            pointer=lambda x: (x**2).sum(),
             constraints=[lambda x: torch.tensor(False)],
             penalty=0.0,
         )
@@ -93,7 +96,7 @@ class TestConstrainedFunction:
 
     def test_multiple_constraints(self):
         fn = ConstrainedFunction(
-            pointer=lambda x: (x ** 2).sum(),
+            pointer=lambda x: (x**2).sum(),
             constraints=[
                 lambda x: torch.tensor(True),
                 lambda x: torch.tensor(True),
@@ -109,8 +112,8 @@ class TestMultiObjectiveFunction:
     def test_two_objectives(self):
         fn = MultiObjectiveFunction(
             functions=[
-                lambda x: (x ** 2).sum(),
-                lambda x: (x ** 3).sum(),
+                lambda x: (x**2).sum(),
+                lambda x: (x**3).sum(),
             ]
         )
         positions = torch.rand(5, 2, 1)
@@ -118,9 +121,7 @@ class TestMultiObjectiveFunction:
         assert result.shape == (5, 2)
 
     def test_single_objective(self):
-        fn = MultiObjectiveFunction(
-            functions=[lambda x: (x ** 2).sum()]
-        )
+        fn = MultiObjectiveFunction(functions=[lambda x: (x**2).sum()])
         positions = torch.rand(3, 2, 1)
         result = fn(positions)
         assert result.shape == (3, 1)
@@ -134,7 +135,7 @@ class TestMultiObjectiveWeightedFunction:
     def test_weighted_scalarization(self):
         fn = MultiObjectiveWeightedFunction(
             functions=[
-                lambda x: (x ** 2).sum(),
+                lambda x: (x**2).sum(),
                 lambda x: (x * 0).sum(),
             ],
             weights=[1.0, 0.0],

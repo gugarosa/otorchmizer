@@ -1,15 +1,18 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for specialized search spaces."""
 
 import pytest
 import torch
 
+import otorchmizer.utils.exception as e
 from otorchmizer.spaces.boolean import BooleanSpace
 from otorchmizer.spaces.graph import GraphSpace
 from otorchmizer.spaces.grid import GridSpace
 from otorchmizer.spaces.hyper_complex import HyperComplexSpace
 from otorchmizer.spaces.pareto import ParetoSpace
 from otorchmizer.spaces.tree import TreeSpace
-import otorchmizer.utils.exception as e
 
 
 class TestBooleanSpace:
@@ -67,7 +70,6 @@ class TestGridSpace:
         assert torch.allclose(positions, expected)
 
     def test_single_step(self):
-        """Scalar step broadcast to all variables."""
         space = GridSpace(
             n_variables=2,
             step=1.0,
@@ -160,32 +162,45 @@ class TestTreeSpace:
             functions=["SUM", "SUB"],
         )
         from otorchmizer.core.node import Node
+
         tree = space.grow(1, 3)
         assert isinstance(tree, Node)
 
     def test_invalid_n_terminals(self):
         with pytest.raises(e.ValueError):
             TreeSpace(
-                n_agents=2, n_variables=1,
-                lower_bound=[0.0], upper_bound=[1.0],
-                n_terminals=0, min_depth=1, max_depth=2,
+                n_agents=2,
+                n_variables=1,
+                lower_bound=[0.0],
+                upper_bound=[1.0],
+                n_terminals=0,
+                min_depth=1,
+                max_depth=2,
                 functions=["SUM"],
             )
 
     def test_invalid_min_depth(self):
         with pytest.raises(e.ValueError):
             TreeSpace(
-                n_agents=2, n_variables=1,
-                lower_bound=[0.0], upper_bound=[1.0],
-                n_terminals=1, min_depth=0, max_depth=2,
+                n_agents=2,
+                n_variables=1,
+                lower_bound=[0.0],
+                upper_bound=[1.0],
+                n_terminals=1,
+                min_depth=0,
+                max_depth=2,
                 functions=["SUM"],
             )
 
     def test_invalid_max_depth_less_than_min(self):
         with pytest.raises(e.ValueError):
             TreeSpace(
-                n_agents=2, n_variables=1,
-                lower_bound=[0.0], upper_bound=[1.0],
-                n_terminals=1, min_depth=3, max_depth=1,
+                n_agents=2,
+                n_variables=1,
+                lower_bound=[0.0],
+                upper_bound=[1.0],
+                n_terminals=1,
+                min_depth=3,
+                max_depth=1,
                 functions=["SUM"],
             )

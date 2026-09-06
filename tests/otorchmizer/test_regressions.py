@@ -1,21 +1,24 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Regression tests — validates fixes for issues found in the audit.
 
 Each test corresponds to a specific audit finding to prevent regressions.
 """
 
-import torch
 import pytest
+import torch
 
 import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
-from otorchmizer.core.population import Population
 from otorchmizer.core.function import Function
 from otorchmizer.core.node import Node
-from otorchmizer.optimizers.swarm.pso import PSO, AIWPSO
-from otorchmizer.optimizers.swarm.fa import FA
-from otorchmizer.optimizers.misc.hc import HC
-from otorchmizer.spaces.search import SearchSpace
 from otorchmizer.core.optimizer import UpdateContext
+from otorchmizer.core.population import Population
+from otorchmizer.optimizers.misc.hc import HC
+from otorchmizer.optimizers.swarm.fa import FA
+from otorchmizer.optimizers.swarm.pso import AIWPSO, PSO
+from otorchmizer.spaces.search import SearchSpace
 
 
 def _make_pop(n_agents=5, n_vars=3, n_dims=1):
@@ -27,7 +30,7 @@ def _make_pop(n_agents=5, n_vars=3, n_dims=1):
 
 
 def _sphere(x):
-    return (x ** 2).sum()
+    return (x**2).sum()
 
 
 class TestConstantFloatMax:
@@ -35,21 +38,19 @@ class TestConstantFloatMax:
 
     def test_float_max_is_finite(self):
         t = torch.tensor(c.FLOAT_MAX)
-        assert t.isfinite(), "FLOAT_MAX should be finite in float32"
+        assert t.isfinite()
 
     def test_float_max_in_tensor_full(self):
         t = torch.full((5,), c.FLOAT_MAX)
         assert t.shape == (5,)
         assert t.isfinite().all()
 
-    def test_population_uses_float_max(self):
-        pop = _make_pop()
-        expected = torch.tensor(c.FLOAT_MAX)
-        # After init (before evaluation), fitness should be FLOAT_MAX
+    def test_population_uses_unbounded_fitness_sentinel(self):
         lb = torch.zeros(3)
         ub = torch.ones(3)
         pop2 = Population(2, 3, 1, lb, ub)
-        assert (pop2.fitness == expected).all()
+        assert pop2.fitness.dtype == torch.float32
+        assert torch.isposinf(pop2.fitness).all()
 
 
 class TestFARegressions:
@@ -57,7 +58,7 @@ class TestFARegressions:
 
     def test_beta_default(self):
         fa = FA()
-        assert fa.beta == 0.2, f"FA beta default should be 0.2, got {fa.beta}"
+        assert fa.beta == 0.2
 
     def test_alpha_default(self):
         fa = FA()
@@ -68,19 +69,18 @@ class TestFARegressions:
         assert fa.gamma == 1.0
 
     def test_alpha_validation(self):
-        with pytest.raises(Exception):
-            fa = FA({"alpha": -1.0})
+        with pytest.raises(e.ValueError):
+            FA({"alpha": -1.0})
 
     def test_beta_validation(self):
-        with pytest.raises(Exception):
-            fa = FA({"beta": -0.5})
+        with pytest.raises(e.ValueError):
+            FA({"beta": -0.5})
 
     def test_gamma_validation(self):
-        with pytest.raises(Exception):
-            fa = FA({"gamma": -1.0})
+        with pytest.raises(e.ValueError):
+            FA({"gamma": -1.0})
 
     def test_alpha_decay(self):
-        """FA alpha should decay each iteration."""
         fa = FA()
         initial_alpha = fa.alpha
 
@@ -90,7 +90,7 @@ class TestFARegressions:
         space.build()
         fa.compile(space.population)
 
-        fn = Function(lambda x: (x ** 2).sum())
+        fn = Function(lambda x: (x**2).sum())
 
         ctx = UpdateContext(
             space=space,
@@ -101,10 +101,9 @@ class TestFARegressions:
         )
 
         fa.update(ctx)
-        assert fa.alpha < initial_alpha, "Alpha should decay after update"
+        assert fa.alpha < initial_alpha
 
     def test_formula_uses_raw_distance(self):
-        """FA attractiveness should use raw distance, not squared."""
         fa = FA()
         pop = _make_pop(n_agents=3)
         fa.compile(pop)
@@ -118,8 +117,10 @@ class TestFARegressions:
         fa.evaluate(space.population, fn)
 
         ctx = UpdateContext(
-            space=space, function=fn,
-            iteration=0, n_iterations=10,
+            space=space,
+            function=fn,
+            iteration=0,
+            n_iterations=10,
             device=torch.device("cpu"),
         )
 
@@ -135,7 +136,6 @@ class TestHCRegressions:
     """Audit: hc-formula, hc-validation."""
 
     def test_unconditional_noise(self):
-        """HC should always add noise, not conditionally accept."""
         hc = HC()
         lb = [0.0, 0.0, 0.0]
         ub = [10.0, 10.0, 10.0]
@@ -145,8 +145,10 @@ class TestHCRegressions:
         fn = Function(_sphere)
 
         ctx = UpdateContext(
-            space=space, function=fn,
-            iteration=0, n_iterations=10,
+            space=space,
+            function=fn,
+            iteration=0,
+            n_iterations=10,
             device=torch.device("cpu"),
         )
 
@@ -156,8 +158,8 @@ class TestHCRegressions:
 
         # ALL positions should change (noise added unconditionally)
         # At least one dimension must differ for each agent
-        changed = ~torch.allclose(pos_before, pos_after)
-        assert changed, "HC should unconditionally add noise to all positions"
+        changed = not torch.allclose(pos_before, pos_after)
+        assert changed
 
     def test_r_var_validation(self):
         with pytest.raises(Exception):

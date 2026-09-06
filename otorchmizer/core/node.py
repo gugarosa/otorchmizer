@@ -1,11 +1,13 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Node class for tree-based optimization (Genetic Programming).
 
 Tree structure remains in Python; terminal values are torch.Tensor.
+
 """
 
 from __future__ import annotations
-
-from typing import Any, Dict, List, Optional, Union
 
 import torch
 
@@ -16,20 +18,23 @@ import otorchmizer.utils.exception as e
 class Node:
     """A binary-tree node for composing GP expression trees.
 
-    Nodes are either TERMINAL (holding a tensor value) or FUNCTION
-    (holding an operation name like SUM, MUL, EXP, etc.).
+    Notes:
+        Nodes are either TERMINAL (holding a tensor value) or FUNCTION
+        (holding an operation name such as SUM, MUL, or EXP).
+        Tree display follows https://github.com/joowani/binarytree/blob/master/binarytree/__init__.py#L153.
+
     """
 
     def __init__(
         self,
-        name: Union[str, int],
+        name: str | int,
         category: str,
-        value: Optional[torch.Tensor] = None,
-        left: Optional[Node] = None,
-        right: Optional[Node] = None,
-        parent: Optional[Node] = None,
+        value: torch.Tensor | None = None,
+        left: Node | None = None,
+        right: Node | None = None,
+        parent: Node | None = None,
     ) -> None:
-        """Initialization method.
+        """Initialize an expression node and its explicit tree links.
 
         Args:
             name: Node identifier (terminal index or function name).
@@ -38,6 +43,15 @@ class Node:
             left: Left child node.
             right: Right child node.
             parent: Parent node.
+
+        Raises:
+            TypeError: A name, terminal value, or tree link has an unsupported type.
+            ValueError: The category is neither "TERMINAL" nor "FUNCTION".
+
+        Notes:
+            Function nodes discard the supplied value. Links are assigned without updating reciprocal links.
+            The child-side flag starts as True and can be changed separately.
+
         """
 
         self.name = name
@@ -55,105 +69,129 @@ class Node:
 
     def __str__(self) -> str:
         """Formatted tree display."""
+
         lines = _build_string(self)[0]
         return "\n" + "\n".join(lines)
 
     @property
-    def name(self) -> Union[str, int]:
+    def name(self) -> str | int:
+        """Terminal identifier or function operation name."""
+
         return self._name
 
     @name.setter
-    def name(self, name: Union[str, int]) -> None:
+    def name(self, name: str | int) -> None:
         if not isinstance(name, (str, int)):
-            raise e.TypeError("`name` should be a string or integer")
+            raise e.TypeError("`name` should be a string or integer.")
         self._name = name
 
     @property
     def category(self) -> str:
+        """Node role, either "TERMINAL" or "FUNCTION"."""
+
         return self._category
 
     @category.setter
     def category(self, category: str) -> None:
         if category not in ("TERMINAL", "FUNCTION"):
-            raise e.ValueError("`category` should be 'TERMINAL' or 'FUNCTION'")
+            raise e.ValueError("`category` should be 'TERMINAL' or 'FUNCTION'.")
         self._category = category
 
     @property
-    def value(self) -> Optional[torch.Tensor]:
+    def value(self) -> torch.Tensor | None:
+        """Stored terminal tensor, or None for a function node."""
+
         return self._value
 
     @value.setter
-    def value(self, value: Optional[torch.Tensor]) -> None:
+    def value(self, value: torch.Tensor | None) -> None:
         if self.category != "TERMINAL":
             self._value = None
         else:
             if not isinstance(value, torch.Tensor):
-                raise e.TypeError("`value` should be a torch.Tensor")
+                raise e.TypeError("`value` should be a torch.Tensor.")
             self._value = value
 
     @property
-    def left(self) -> Optional[Node]:
+    def left(self) -> Node | None:
+        """Left child, or None when no left child is linked."""
+
         return self._left
 
     @left.setter
-    def left(self, left: Optional[Node]) -> None:
+    def left(self, left: Node | None) -> None:
         if left is not None and not isinstance(left, Node):
-            raise e.TypeError("`left` should be a Node")
+            raise e.TypeError("`left` should be a Node.")
         self._left = left
 
     @property
-    def right(self) -> Optional[Node]:
+    def right(self) -> Node | None:
+        """Right child, or None when no right child is linked."""
+
         return self._right
 
     @right.setter
-    def right(self, right: Optional[Node]) -> None:
+    def right(self, right: Node | None) -> None:
         if right is not None and not isinstance(right, Node):
-            raise e.TypeError("`right` should be a Node")
+            raise e.TypeError("`right` should be a Node.")
         self._right = right
 
     @property
-    def parent(self) -> Optional[Node]:
+    def parent(self) -> Node | None:
+        """Parent node, or None when no parent is linked."""
+
         return self._parent
 
     @parent.setter
-    def parent(self, parent: Optional[Node]) -> None:
+    def parent(self, parent: Node | None) -> None:
         if parent is not None and not isinstance(parent, Node):
-            raise e.TypeError("`parent` should be a Node")
+            raise e.TypeError("`parent` should be a Node.")
         self._parent = parent
 
     @property
     def flag(self) -> bool:
+        """Stored child-side flag returned during crossover lookup."""
+
         return self._flag
 
     @flag.setter
     def flag(self, flag: bool) -> None:
         if not isinstance(flag, bool):
-            raise e.TypeError("`flag` should be a boolean")
+            raise e.TypeError("`flag` should be a boolean.")
         self._flag = flag
 
     @property
     def min_depth(self) -> int:
+        """Shortest distance in edges from this node to a leaf."""
+
         return _properties(self)["min_depth"]
 
     @property
     def max_depth(self) -> int:
+        """Longest distance in edges from this node to a leaf."""
+
         return _properties(self)["max_depth"]
 
     @property
     def n_leaves(self) -> int:
+        """Number of reachable nodes with no children."""
+
         return _properties(self)["n_leaves"]
 
     @property
     def n_nodes(self) -> int:
+        """Number of nodes in this subtree, including this node."""
+
         return _properties(self)["n_nodes"]
 
     @property
-    def position(self) -> torch.Tensor:
-        """Evaluates the expression tree and returns the result tensor."""
+    def position(self) -> torch.Tensor | None:
+        """Evaluated expression tensor, or None for an unknown operation."""
+
         return _evaluate(self)
 
     @property
-    def post_order(self) -> List[Node]:
+    def post_order(self) -> list[Node]:
         """Post-order traversal of the tree."""
 
         result, stack = [], []
@@ -168,8 +206,7 @@ class Node:
 
             node = stack.pop()
 
-            if (node.right is not None and len(stack) > 0
-                    and stack[-1] is node.right):
+            if node.right is not None and len(stack) > 0 and stack[-1] is node.right:
                 stack.pop()
                 stack.append(node)
                 node = node.right
@@ -183,7 +220,7 @@ class Node:
         return result
 
     @property
-    def pre_order(self) -> List[Node]:
+    def pre_order(self) -> list[Node]:
         """Pre-order traversal of the tree."""
 
         result, stack = [], [self]
@@ -199,14 +236,18 @@ class Node:
 
         return result
 
-    def find_node(self, position: int) -> tuple[Optional[Node], bool]:
-        """Finds a node at a given pre-order position.
+    def find_node(self, position: int) -> tuple[Node | None, bool]:
+        """Find a crossover parent and child-side flag by pre-order index.
 
         Args:
             position: Pre-order index.
 
         Returns:
-            Tuple of (parent_node, is_left_child_flag).
+            Parent and child-side flag for a terminal, grandparent and parent flag for a function, or (None, False).
+
+        Notes:
+            Function nodes require both a parent and a grandparent to produce a usable result.
+
         """
 
         pre_order = self.pre_order
@@ -224,9 +265,7 @@ class Node:
         return None, False
 
 
-def _evaluate(node: Optional[Node]) -> Optional[torch.Tensor]:
-    """Recursively evaluates a node tree using PyTorch operations."""
-
+def _evaluate(node: Node | None) -> torch.Tensor | None:
     if node is None:
         return None
 
@@ -255,9 +294,7 @@ def _evaluate(node: Optional[Node]) -> Optional[torch.Tensor]:
     return None
 
 
-def _properties(node: Node) -> Dict[str, Any]:
-    """Computes tree properties via BFS."""
-
+def _properties(node: Node) -> dict[str, int]:
     min_depth, max_depth = 0, -1
     n_leaves = n_nodes = 0
 
@@ -287,19 +324,7 @@ def _properties(node: Node) -> Dict[str, Any]:
     }
 
 
-def _build_string(node: Optional[Node]) -> tuple:
-    """Builds a formatted string for displaying the nodes.
-
-    References:
-        https://github.com/joowani/binarytree/blob/master/binarytree/__init__.py#L153
-
-    Args:
-        node: An instance of the Node class (can be a tree of Nodes).
-
-    Returns:
-        Tuple of (lines, width, start, end) for formatted display.
-    """
-
+def _build_string(node: Node | None) -> tuple:
     if node is None:
         return [], 0, 0, 0
 

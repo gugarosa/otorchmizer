@@ -1,8 +1,9 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Boolean (binary) search space."""
 
 from __future__ import annotations
-
-from typing import List, Optional, Union
 
 import torch
 
@@ -13,18 +14,28 @@ logger = logging.get_logger(__name__)
 
 
 class BooleanSpace(Space):
-    """Search space for binary optimization.
-
-    Bounds are fixed to [0, 1] and positions are initialized as {0, 1}.
-    """
+    """Search space for binary optimization."""
 
     def __init__(
         self,
         n_agents: int,
         n_variables: int,
-        mapping: Optional[List[str]] = None,
-        device: Union[str, torch.device] = "auto",
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
     ) -> None:
+        """Initialize a binary search space.
+
+        Args:
+            n_agents: Number of agents.
+            n_variables: Number of decision variables.
+            mapping: Human-readable names for the decision variables.
+            device: Device used to store population tensors.
+
+        Notes:
+            Bounds are fixed to [0, 1], and positions are initialized with values from {0, 1}.
+
+        """
+
         logger.info("Creating class: BooleanSpace.")
 
         super().__init__(

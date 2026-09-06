@@ -1,8 +1,9 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Hypercomplex search space."""
 
 from __future__ import annotations
-
-from typing import List, Optional, Union
 
 import torch
 
@@ -13,21 +14,30 @@ logger = logging.get_logger(__name__)
 
 
 class HyperComplexSpace(Space):
-    """Search space for hypercomplex (multi-dimensional) optimization.
-
-    Each variable has n_dimensions > 1 (e.g., quaternions use 4).
-    Bounds are fixed to [0, 1] in the hypercomplex domain;
-    mapping to real bounds is done via the hyper math module.
-    """
+    """Search space for hypercomplex optimization."""
 
     def __init__(
         self,
         n_agents: int,
         n_variables: int,
         n_dimensions: int,
-        mapping: Optional[List[str]] = None,
-        device: Union[str, torch.device] = "auto",
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
     ) -> None:
+        """Initialize a hypercomplex search space.
+
+        Args:
+            n_agents: Number of agents.
+            n_variables: Number of decision variables.
+            n_dimensions: Number of dimensions in each hypercomplex variable.
+            mapping: Human-readable names for the decision variables.
+            device: Device used to store population tensors.
+
+        Notes:
+            Bounds are fixed to [0, 1] in the hypercomplex domain. The hyper math module maps values to real bounds.
+
+        """
+
         logger.info("Creating class: HyperComplexSpace.")
 
         super().__init__(
