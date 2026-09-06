@@ -213,7 +213,7 @@ def test_ep_archives_best_evaluated_child_dropped_by_tournament(monkeypatch):
     space = _space(2, lower=-10, upper=10)
     space.population.initialize_static(torch.tensor([[3.0], [4.0]]))
     function = Function(_sphere)
-    optimizer = EP({"bout_size": 0.5, "clip_ratio": 1.0})
+    optimizer = EP({"bout_size": 1.0, "clip_ratio": 1.0})
     optimizer.compile(space.population)
     optimizer.strategy.fill_(1)
     optimizer.evaluate(space.population, function)
@@ -223,6 +223,8 @@ def test_ep_archives_best_evaluated_child_dropped_by_tournament(monkeypatch):
             torch.tensor([[[-3.0]], [[1.0]]]),
         ]
     )
+    # Distinct win counts avoid backend-dependent ordering of tied topk entries
+    opponents = iter([[3, 3, 2, 0], [1, 1, 2, 0]])
 
     monkeypatch.setattr(
         torch,
@@ -233,12 +235,13 @@ def test_ep_archives_best_evaluated_child_dropped_by_tournament(monkeypatch):
     monkeypatch.setattr(
         torch,
         "randint",
-        lambda _low, _high, _shape, device=None: torch.tensor([3, 3, 2, 0], device=device),
+        lambda _low, _high, _shape, device=None: torch.tensor(next(opponents), device=device),
     )
 
     optimizer.update(_context(space, function))
 
     assert torch.allclose(space.population.positions.flatten(), torch.tensor([3.0, 4.0]))
+    assert torch.allclose(space.population.fitness, torch.tensor([9.0, 16.0]))
     assert space.population.best_position.item() == 0
     assert space.population.best_fitness.item() == 0
 
