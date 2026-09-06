@@ -12,9 +12,12 @@ version = release
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
 ]
+autosummary_generate = True
 napoleon_numpy_docstring = False
 autoclass_content = "both"
 autodoc_typehints = "none"
@@ -64,5 +67,5 @@ texinfo_documents = [
 epub_title = project
 epub_exclude_files = ["search.html"]
 
-autodoc_default_options = {"exclude-members": "__weakref__"}
+autodoc_default_options = {"members": True, "show-inheritance": True, "exclude-members": "__weakref__"}
 autodoc_member_order = "bysource"
