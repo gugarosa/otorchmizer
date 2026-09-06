@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Gravitational Search Algorithm.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -23,10 +26,19 @@ logger = logging.get_logger(__name__)
 class GSA(Optimizer):
     """Gravitational Search Algorithm.
 
-    Mass and force-based movement with decaying gravity.
+    Notes:
+        Moves candidates using mass and force interactions under decaying gravity.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the GSA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> GSA.")
 
         self.G = 2.467
@@ -37,21 +49,53 @@ class GSA(Optimizer):
 
     @property
     def G(self) -> float:
+        """Return the initial gravity.
+
+        Returns:
+            float: Current initial gravity.
+
+        """
+
         return self._G
 
     @G.setter
     def G(self, G: float) -> None:
+        """Set the initial gravity.
+
+        Args:
+            G: New value for the initial gravity.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+            ValueError: If the supplied value is outside its valid range.
+
+        """
+
         if not isinstance(G, (float, int)):
-            raise e.TypeError("`G` should be a float or integer")
+            raise e.TypeError("`G` must be a float or integer.")
         if G < 0:
-            raise e.ValueError("`G` should be >= 0")
+            raise e.ValueError("`G` must be non-negative.")
         self._G = G
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.velocity = torch.zeros(shape, device=population.device)
+        self.velocity = population.positions.new_zeros(shape)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one GSA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents

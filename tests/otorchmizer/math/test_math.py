@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for math modules: random, distribution, general, hyper."""
 
 import torch

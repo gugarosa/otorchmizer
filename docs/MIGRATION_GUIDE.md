@@ -1,6 +1,14 @@
 # Migration Guide: Opytimizer → Otorchmizer
 
-This guide helps existing Opytimizer users migrate to Otorchmizer, the PyTorch-based successor. Every algorithm behaves identically, but the underlying engine runs on PyTorch tensors — enabling GPU acceleration and 50–2,300× speedups.
+This guide describes the tensor-based workflow for Opytimizer users. Otorchmizer is
+not a drop-in replacement, and matching class names do not guarantee identical
+trajectories. Validate objective batching, dtype, update semantics, and device support
+for the actual workload rather than extrapolating the historical benchmark results.
+
+Known algorithm identity, equation, and parameter differences are listed in
+[Algorithm migration limits](algorithm_limits.rst). In particular, ``ABO``, ``FSO``,
+and ``SSO`` currently implement different algorithm identities from their intended
+migration targets.
 
 ---
 
@@ -15,10 +23,12 @@ from opytimizer.optimizers.swarm import PSO
 from opytimizer.spaces import SearchSpace
 import numpy as np
 
-def sphere(x):
-    return np.sum(x ** 2)
 
-space = SearchSpace(n_agents=20, n_variables=5, lower_bound=[-5]*5, upper_bound=[5]*5)
+def sphere(x):
+    return np.sum(x**2)
+
+
+space = SearchSpace(n_agents=20, n_variables=5, lower_bound=[-5] * 5, upper_bound=[5] * 5)
 optimizer = PSO()
 function = Function(sphere)
 
@@ -35,12 +45,14 @@ from otorchmizer.core import Function, Space
 from otorchmizer.optimizers.swarm import PSO
 import torch
 
-def sphere(x):
-    return (x ** 2).sum(dim=(-1, -2))
 
-space = Space(n_agents=20, n_variables=5,
-              lower_bound=[-5]*5, upper_bound=[5]*5,
-              device="auto")  # ← "auto" picks GPU if available
+def sphere(x):
+    return (x**2).sum(dim=(-1, -2))
+
+
+space = Space(
+    n_agents=20, n_variables=5, lower_bound=[-5] * 5, upper_bound=[5] * 5, device="auto"
+)  # ← "auto" picks GPU if available
 space.build()
 
 optimizer = PSO()
@@ -71,8 +83,8 @@ print(space.population.best_fitness.item())
 | `Function(fn)` | `Function(fn)` | Same API; uses `torch.vmap` internally |
 | `inspect.signature` dispatch | `UpdateContext` dataclass | All optimizers get the same context |
 | `np.array` | `torch.Tensor` | GPU-ready by default |
-| `deepcopy(agent)` | `tensor.clone()` | 100× faster |
-| `float("inf")` | `torch.finfo(torch.float32).max` | Safe for `torch.full()` |
+| `deepcopy(agent)` | `tensor.clone()` | Explicit tensor snapshot |
+| Unevaluated fitness | Positive-infinity tensor | Representable across supported floating dtypes |
 
 ---
 
@@ -88,10 +100,12 @@ def rastrigin(x):
     n = x.shape[0]
     return 10 * n + np.sum(x**2 - 10 * np.cos(2 * np.pi * x))
 
+
 # PyTorch (Otorchmizer) — single-agent version (auto-vmapped)
 def rastrigin(x):
     n = x.shape[0]
     return 10 * n + (x**2 - 10 * torch.cos(2 * torch.pi * x)).sum()
+
 
 # PyTorch (Otorchmizer) — batch version (explicit)
 def rastrigin_batch(positions):
@@ -100,9 +114,16 @@ def rastrigin_batch(positions):
     n = x.shape[1]
     return 10 * n + (x**2 - 10 * torch.cos(2 * torch.pi * x)).sum(dim=1)
 
-fn = Function(rastrigin)             # auto-vmapped
+
+fn = Function(rastrigin)  # auto-vmapped
 fn = Function(rastrigin_batch, batch=True)  # manual batch
 ```
+
+Every objective must produce one scalar per agent. Known `vmap` incompatibilities
+fall back to per-agent evaluation with a diagnostic; other objective errors are
+not retried. Objectives should be free of side effects because a failed transformed
+call can execute part of the objective before the fallback. Native batch functions
+must return a tensor shaped `(n_agents,)`, not a scalar broadcast across the population.
 
 ### Common NumPy → PyTorch translations
 
@@ -122,7 +143,7 @@ fn = Function(rastrigin_batch, batch=True)  # manual batch
 ## Device Selection (CPU / GPU / Multi-GPU)
 
 ```python
-# CPU (default)
+# Explicit CPU
 space = Space(..., device="cpu")
 
 # Auto-detect GPU
@@ -133,6 +154,7 @@ space = Space(..., device="cuda:0")
 
 # Check available GPUs
 from otorchmizer.core import DeviceManager
+
 print(DeviceManager.available_gpus())  # [device(cuda:0), device(cuda:1), ...]
 ```
 
@@ -149,14 +171,16 @@ space.build()
 gpus = DeviceManager.available_gpus()
 sub_populations = space.population.scatter(gpus)
 
-# Process each sub-population independently
-for sub_pop in sub_populations:
-    optimizer.update_on(sub_pop)
-
 # Merge back
 from otorchmizer.core import Population
 merged = Population.gather(sub_populations, target_device=gpus[0])
 ```
+
+Splitting and gathering are data-management operations, not a parallel execution
+scheduler. Create independent optimizer state for each shard before updating it.
+The package has no `update_on` method. See
+`examples/applications/gpu/multi_gpu_optimization.py` for an explicit update loop.
+Shards on the source device may share storage with the source population.
 
 ---
 
@@ -168,10 +192,15 @@ For memory-bound problems, use float16 or bfloat16:
 from otorchmizer.core import DeviceManager, Population
 
 # Set dtype at population level
-pop = Population(n_agents=1000, n_variables=100, n_dimensions=1,
-                 lower_bound=lb, upper_bound=ub,
-                 device=torch.device("cuda:0"),
-                 dtype=torch.float16)
+pop = Population(
+    n_agents=1000,
+    n_variables=100,
+    n_dimensions=1,
+    lower_bound=lb,
+    upper_bound=ub,
+    device=torch.device("cuda:0"),
+    dtype=torch.float16,
+)
 
 # Or use DeviceManager autocast for automatic mixed-precision
 dm = DeviceManager("cuda:0", dtype=torch.float16)
@@ -183,7 +212,8 @@ with dm.autocast():
 
 ## torch.compile (JIT Acceleration)
 
-For additional 2–5× speedup on supported hardware:
+Compilation may help compatible workloads but can also introduce overhead or graph
+breaks. Measure it with the intended algorithm and backend:
 
 ```python
 opt = PSO()
@@ -200,14 +230,16 @@ for i in range(n_iterations):
 
 ## CUDA Graphs
 
-For small problems where kernel launch overhead dominates:
+For compatible fixed-shape, in-place workloads where kernel launch overhead matters:
 
 ```python
 from otorchmizer.core import DeviceManager
 
+
 def update_step(positions, velocities):
     velocities.mul_(0.7).add_(torch.randn_like(positions) * 0.1)
     positions.add_(velocities)
+
 
 # Pre-allocate static tensors on GPU
 pos = torch.randn(100, 10, device="cuda")
@@ -221,11 +253,16 @@ for _ in range(1000):
     runner.replay()
 ```
 
+Capture and warmup execute the callable and can mutate its inputs. Keep the captured
+tensor storage alive, and do not assume every optimizer's Python control flow or
+tensor replacement is CUDA-Graph compatible.
+
 ---
 
 ## Algorithm Reference
 
-All 91 algorithms from Opytimizer are available in Otorchmizer with identical class names:
+The following 91 optimizer classes are exported. Their source implementations and
+documented variants, not their names alone, define behavior:
 
 | Family | Algorithms |
 |--------|-----------|
@@ -268,12 +305,12 @@ pso = PSO(params={"w": 0.5, "c1": 2.0, "c2": 2.0})
 
 ```python
 # Opytimizer
-best_position = space.best_agent.position   # np.ndarray
-best_fitness = space.best_agent.fit          # float
+best_position = space.best_agent.position  # np.ndarray
+best_fitness = space.best_agent.fit  # float
 
 # Otorchmizer
-best_position = space.population.best_position   # torch.Tensor
-best_fitness = space.population.best_fitness      # torch.Tensor (scalar)
+best_position = space.population.best_position  # torch.Tensor
+best_fitness = space.population.best_fitness  # torch.Tensor (scalar)
 
 # Convert to numpy if needed
 best_np = best_position.cpu().numpy()
@@ -285,13 +322,17 @@ best_val = best_fitness.item()
 ## FAQ
 
 **Q: Do I need a GPU?**
-No. Otorchmizer runs on CPU by default and still achieves 50–170× speedup over Opytimizer through vectorized tensor operations.
+No. Use `device="cpu"` explicitly, or `device="auto"` to select CUDA when available.
+CPU performance depends on the optimizer, objective, population size, and thread configuration.
 
 **Q: Can I use my existing NumPy fitness function?**
 You'll need to rewrite it using PyTorch ops. Most translations are 1:1 (see table above). The key difference is using `torch.sum()` instead of `np.sum()`, etc.
 
 **Q: Are the results identical?**
-Convergence quality is at parity. Minor numerical differences exist because PyTorch defaults to float32 (7 digits) while NumPy uses float64 (15 digits). Both converge to the correct optima.
+No identical-result or convergence guarantee is made. Dtype, random-number streams,
+parallel update order, and algorithm variants can change results. Compare meaningful
+quality and evaluation-budget invariants rather than expecting identical trajectories.
 
 **Q: Which algorithms are not yet migrated?**
-Three specialized algorithms are deferred: GP (requires TreeSpace), LOA (complex custom agent), and NDS (multi-objective). All 91 standard algorithms are fully migrated.
+GP, LOA, and NDS are not exported here. `GraphSpace` is an experimental descriptor,
+not a complete population-backed space for the main optimization loop.

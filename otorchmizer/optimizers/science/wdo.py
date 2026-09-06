@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Wind Driven Optimization.
 
 References:
@@ -9,7 +12,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -23,10 +26,19 @@ logger = logging.get_logger(__name__)
 class WDO(Optimizer):
     """Wind Driven Optimization.
 
-    Pressure, Coriolis, gravity, and friction-based air parcel movement.
+    Notes:
+        Models air-parcel movement using pressure, Coriolis, gravity, and friction terms.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the WDO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> WDO.")
 
         self.v_max = 0.3
@@ -41,29 +53,77 @@ class WDO(Optimizer):
 
     @property
     def v_max(self) -> float:
+        """Return the maximum velocity.
+
+        Returns:
+            float: Current maximum velocity.
+
+        """
+
         return self._v_max
 
     @v_max.setter
     def v_max(self, v_max: float) -> None:
+        """Set the maximum velocity.
+
+        Args:
+            v_max: New value for the maximum velocity.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(v_max, (float, int)):
-            raise e.TypeError("`v_max` should be a float or integer")
+            raise e.TypeError("`v_max` must be a float or integer.")
         self._v_max = v_max
 
     @property
     def alpha(self) -> float:
+        """Return the alpha coefficient.
+
+        Returns:
+            float: Current alpha coefficient.
+
+        """
+
         return self._alpha
 
     @alpha.setter
     def alpha(self, alpha: float) -> None:
+        """Set the alpha coefficient.
+
+        Args:
+            alpha: New value for the alpha coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` should be a float or integer")
+            raise e.TypeError("`alpha` must be a float or integer.")
         self._alpha = alpha
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.velocity = torch.zeros(shape, device=population.device)
+        self.velocity = population.positions.new_zeros(shape)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one WDO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents

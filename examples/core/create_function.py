@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer.core import Function
@@ -5,11 +8,21 @@ from otorchmizer.core import Function
 
 # Defines a function with a tensor input and a scalar return
 def sphere(x):
-    return (x ** 2).sum()
+    """Compute the sphere objective for one candidate.
+
+    Args:
+        x: Candidate position tensor.
+
+    Returns:
+        Sum of squared tensor values.
+
+    """
+
+    return (x**2).sum()
 
 
-# Any type of PyTorch-compatible function can be used as a pointer.
-# The Function class auto-vectorizes it across the population via torch.vmap.
+# Any type of PyTorch-compatible function can be used as a pointer
+# The Function class auto-vectorizes it across the population via torch.vmap
 f = Function(sphere)
 
 # Evaluates across a batch of agents

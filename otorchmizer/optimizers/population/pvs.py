@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Passing Vehicle Search.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -19,12 +22,16 @@ logger = logging.get_logger(__name__)
 
 
 class PVS(Optimizer):
-    """Passing Vehicle Search.
+    """Apply vehicle overtaking dynamics to a ranked population."""
 
-    Vehicle overtaking dynamics.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> PVS.")
 
         super().__init__(params)
@@ -32,6 +39,13 @@ class PVS(Optimizer):
         logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
+        """Sort vehicles and update their positions through passing scenarios.
+
+        Args:
+            ctx: Current optimization state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -45,7 +59,6 @@ class PVS(Optimizer):
         new_positions = pop.positions.clone()
 
         for i in range(n):
-            # Select two random agents
             R = torch.randperm(n, device=device)
             R = R[R != i][:2]
             if len(R) < 2:
@@ -56,9 +69,9 @@ class PVS(Optimizer):
             D2 = pop.fitness[r0] / n
             D3 = pop.fitness[r1_idx] / n
 
-            V1 = torch.rand(1, device=device) * (1 - D1)
-            V2 = torch.rand(1, device=device) * (1 - D2)
-            V3 = torch.rand(1, device=device) * (1 - D3)
+            V1 = torch.rand(1, device=device, dtype=pop.dtype) * (1 - D1)
+            V2 = torch.rand(1, device=device, dtype=pop.dtype) * (1 - D2)
+            V3 = torch.rand(1, device=device, dtype=pop.dtype) * (1 - D3)
 
             x = torch.abs(D3 - D1)
             y = torch.abs(D3 - D2)
@@ -69,13 +82,17 @@ class PVS(Optimizer):
 
                 if (y - y1) > x1:
                     Vco = V1 / (V1 - V3 + 1e-10)
-                    r = torch.rand(1, 1, device=device)
+                    r = torch.rand(1, 1, device=device, dtype=pop.dtype)
                     new_positions[i] = pop.positions[i] + Vco * r * (pop.positions[i] - pop.positions[r1_idx])
                 else:
-                    r = torch.rand(1, 1, device=device)
+                    r = torch.rand(1, 1, device=device, dtype=pop.dtype)
                     new_positions[i] = pop.positions[i] + r * (pop.positions[i] - pop.positions[r0])
             else:
-                r = torch.rand(1, 1, device=device)
+                r = torch.rand(1, 1, device=device, dtype=pop.dtype)
                 new_positions[i] = pop.positions[i] + r * (pop.positions[r1_idx] - pop.positions[i])
 
-        pop.positions = new_positions.clamp(min=lb, max=ub)
+        new_positions = new_positions.clamp(min=lb, max=ub)
+        new_fitness = ctx.function(new_positions)
+        improved = new_fitness < pop.fitness
+        pop.positions[improved] = new_positions[improved]
+        pop.fitness[improved] = new_fitness[improved]

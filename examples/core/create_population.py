@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer.core import Population
@@ -12,9 +15,9 @@ lower_bound = torch.tensor([0.0, 0.0])
 upper_bound = torch.tensor([1.0, 1.0])
 
 # Creates a new Population (replaces Agent from Opytimizer)
-pop = Population(n_agents=10, n_variables=n_variables,
-                 n_dimensions=n_dimensions,
-                 lower_bound=lower_bound, upper_bound=upper_bound)
+pop = Population(
+    n_agents=10, n_variables=n_variables, n_dimensions=n_dimensions, lower_bound=lower_bound, upper_bound=upper_bound
+)
 
 # Initializes positions uniformly within bounds
 pop.initialize_uniform()

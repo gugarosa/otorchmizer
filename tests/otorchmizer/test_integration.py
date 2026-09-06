@@ -1,27 +1,31 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Integration test: end-to-end optimization with Otorchmizer."""
 
 import torch
 
 from otorchmizer import Otorchmizer
 from otorchmizer.core import Function
-from otorchmizer.optimizers.swarm import PSO, WOA
 from otorchmizer.optimizers.evolutionary import GA
+from otorchmizer.optimizers.swarm import PSO, WOA
 from otorchmizer.spaces import SearchSpace
 
 
 def _sphere(x):
-    return (x ** 2).sum()
+    return (x**2).sum()
 
 
 class TestOtorchmizerIntegration:
     def test_pso_full_run(self):
-        """Full PSO optimization should complete without errors."""
 
         torch.manual_seed(42)
 
         space = SearchSpace(
-            n_agents=20, n_variables=2,
-            lower_bound=[-10, -10], upper_bound=[10, 10],
+            n_agents=20,
+            n_variables=2,
+            lower_bound=[-10, -10],
+            upper_bound=[10, 10],
             device="cpu",
         )
         optimizer = PSO()
@@ -37,8 +41,10 @@ class TestOtorchmizerIntegration:
         torch.manual_seed(42)
 
         space = SearchSpace(
-            n_agents=20, n_variables=2,
-            lower_bound=[-10, -10], upper_bound=[10, 10],
+            n_agents=20,
+            n_variables=2,
+            lower_bound=[-10, -10],
+            upper_bound=[10, 10],
             device="cpu",
         )
         optimizer = WOA()
@@ -53,8 +59,10 @@ class TestOtorchmizerIntegration:
         torch.manual_seed(42)
 
         space = SearchSpace(
-            n_agents=30, n_variables=2,
-            lower_bound=[-10, -10], upper_bound=[10, 10],
+            n_agents=30,
+            n_variables=2,
+            lower_bound=[-10, -10],
+            upper_bound=[10, 10],
             device="cpu",
         )
         optimizer = GA()
@@ -66,7 +74,6 @@ class TestOtorchmizerIntegration:
         assert opt.space.best_fitness.item() < 100.0
 
     def test_custom_params(self):
-        """Optimizer params should be overridable."""
 
         pso = PSO(params={"w": 0.5, "c1": 2.0, "c2": 2.0})
         assert pso.w == 0.5

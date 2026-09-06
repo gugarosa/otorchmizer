@@ -1,37 +1,46 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """General-purpose mathematical utilities (PyTorch-native)."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from itertools import islice
-from typing import Any, Iterable, List
+from typing import TypeVar
 
 import torch
 
+T = TypeVar("T")
+
 
 def euclidean_distance(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """Calculates the Euclidean distance between two tensors.
+    """Calculate the Euclidean distance between two tensors.
 
     Args:
         x: First tensor.
         y: Second tensor.
 
     Returns:
-        Euclidean distance (scalar or per-sample).
+        Scalar or per-sample Euclidean distances.
+
     """
 
     return torch.linalg.norm(x - y, dim=-1)
 
 
 def pairwise_distances(positions: torch.Tensor) -> torch.Tensor:
-    """Computes the full pairwise distance matrix for a population.
-
-    Replaces nested O(n²) Python loops (FA, GOA, KH) with a single call.
+    """Compute the full pairwise distance matrix for a population.
 
     Args:
         positions: Tensor of shape (n_agents, n_variables, n_dimensions).
 
     Returns:
         Distance matrix of shape (n_agents, n_agents).
+
+    Notes:
+        This operation replaces the nested O(n²) Python loops used by FA, GOA, and KH.
+
     """
 
     flat = positions.reshape(positions.shape[0], -1)
@@ -44,16 +53,17 @@ def kmeans_torch(
     max_iterations: int = 100,
     tol: float = 1e-4,
 ) -> torch.Tensor:
-    """GPU-accelerated K-Means clustering.
+    """Cluster tensor samples with GPU-accelerated K-Means.
 
     Args:
         x: Input tensor of shape (n_samples, n_variables, n_dimensions).
         n_clusters: Number of clusters.
-        max_iterations: Maximum iterations.
+        max_iterations: Maximum number of iterations.
         tol: Convergence tolerance.
 
     Returns:
         Cluster labels of shape (n_samples,).
+
     """
 
     n_samples = x.shape[0]
@@ -82,8 +92,8 @@ def kmeans_torch(
     return labels
 
 
-def n_wise(x: List[Any], size: int = 2) -> Iterable:
-    """Iterates over a list and returns n-wise tuples.
+def n_wise(x: list[T], size: int = 2) -> Iterable[tuple[T, ...]]:
+    """Iterate over a list in non-overlapping tuples.
 
     Args:
         x: Values to iterate over.
@@ -91,6 +101,7 @@ def n_wise(x: List[Any], size: int = 2) -> Iterable:
 
     Returns:
         Iterator of n-wise tuples.
+
     """
 
     iterator = iter(x)
@@ -102,7 +113,7 @@ def tournament_selection(
     n: int,
     size: int = 2,
 ) -> torch.Tensor:
-    """Vectorized tournament selection.
+    """Select population members through vectorized tournaments.
 
     Args:
         fitness: Fitness values, shape (n_agents,).
@@ -111,6 +122,7 @@ def tournament_selection(
 
     Returns:
         Indices of selected individuals.
+
     """
 
     device = fitness.device
@@ -122,13 +134,14 @@ def tournament_selection(
 
 
 def weighted_wheel_selection(weights: torch.Tensor) -> int:
-    """Selects an individual from a weight-based roulette.
+    """Select an individual with weight-based roulette.
 
     Args:
         weights: Weight values.
 
     Returns:
         Selected index.
+
     """
 
     cumsum = torch.cumsum(weights, dim=0)

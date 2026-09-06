@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Crow Search Algorithm.
 
 References:
@@ -5,16 +8,19 @@ References:
     A novel metaheuristic method for solving constrained engineering
     optimization problems: Crow search algorithm.
     Computers & Structures (2016).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
 import otorchmizer.utils.exception as e
+from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
 
 logger = logging.get_logger(__name__)
@@ -23,10 +29,19 @@ logger = logging.get_logger(__name__)
 class CSA(Optimizer):
     """Crow Search Algorithm.
 
-    Vectorized memory-based crow search.
+    Notes:
+        Vectorized memory-based crow search.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> CSA.")
 
         self.fl = 2.0
@@ -38,31 +53,65 @@ class CSA(Optimizer):
 
     @property
     def fl(self) -> float:
+        """Return the flight length."""
+
         return self._fl
 
     @fl.setter
     def fl(self, fl: float) -> None:
         if not isinstance(fl, (float, int)):
-            raise e.TypeError("`fl` should be a float or integer")
+            raise e.TypeError("`fl` must be a float or integer.")
         self._fl = fl
 
     @property
     def AP(self) -> float:
+        """Return the awareness probability."""
+
         return self._AP
 
     @AP.setter
     def AP(self, AP: float) -> None:
         if not isinstance(AP, (float, int)):
-            raise e.TypeError("`AP` should be a float or integer")
+            raise e.TypeError("`AP` must be a float or integer.")
         if not 0 <= AP <= 1:
-            raise e.ValueError("`AP` should be between 0 and 1")
+            raise e.ValueError("`AP` must be between 0 and 1.")
         self._AP = AP
 
-    def compile(self, population) -> None:
+    def compile(self, population: Population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         self.memory = population.positions.clone()
-        self.memory_fitness = population.fitness.clone()
+        self.memory_fitness = torch.full_like(population.fitness, torch.inf)
+
+    def evaluate(self, population: Population, function: Function) -> None:
+        """Evaluate the population and synchronize each crow's memory.
+
+        Args:
+            population: Population to evaluate.
+            function: Objective function applied to the population.
+
+        """
+
+        new_fitness = function(population.positions)
+        improved = new_fitness < self.memory_fitness
+        self.memory[improved] = population.positions[improved].clone()
+        self.memory_fitness[improved] = new_fitness[improved].clone()
+        population.fitness = new_fitness
+        population.update_best()
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -70,19 +119,14 @@ class CSA(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        # Select random crow to follow
         j = torch.randint(0, n, (n,), device=device)
 
-        # Awareness probability check
-        r = torch.rand(n, 1, 1, device=device)
-        aware = torch.rand(n, device=device)
+        aware = torch.rand(n, device=device, dtype=pop.dtype)
 
-        # If aware > AP: move toward memory of crow j
-        # Else: random position
-        r_fl = torch.rand(n, 1, 1, device=device) * self.fl
+        r_fl = torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * self.fl
         toward_memory = pop.positions + r_fl * (self.memory[j] - pop.positions)
 
-        random_pos = torch.rand(n, pop.n_variables, pop.n_dimensions, device=device) * (ub - lb) + lb
+        random_pos = torch.rand(n, pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype) * (ub - lb) + lb
 
         not_aware = (aware >= self.AP).view(n, 1, 1)
         new_positions = torch.where(not_aware, toward_memory, random_pos)
@@ -90,12 +134,10 @@ class CSA(Optimizer):
 
         new_fitness = fn(new_positions)
 
-        # Update positions
         improved = new_fitness < pop.fitness
         pop.positions[improved] = new_positions[improved]
         pop.fitness[improved] = new_fitness[improved]
 
-        # Update memory
         mem_improved = new_fitness < self.memory_fitness
         self.memory[mem_improved] = new_positions[mem_improved]
         self.memory_fitness[mem_improved] = new_fitness[mem_improved]

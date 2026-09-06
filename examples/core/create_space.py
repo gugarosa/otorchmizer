@@ -1,11 +1,13 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 from otorchmizer.core import Space
 
 # Creates a search space
 # device="auto" picks GPU if available, otherwise CPU
-space = Space(n_agents=20, n_variables=5,
-              lower_bound=[-10, -10, -10, -10, -10],
-              upper_bound=[10, 10, 10, 10, 10],
-              device="cpu")
+space = Space(
+    n_agents=20, n_variables=5, lower_bound=[-10, -10, -10, -10, -10], upper_bound=[10, 10, 10, 10, 10], device="cpu"
+)
 
 # Builds the space (initializes population)
 space.build()

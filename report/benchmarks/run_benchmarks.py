@@ -1,11 +1,14 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Benchmark suite: Opytimizer (NumPy) vs Otorchmizer (PyTorch).
 
 Measures wall-clock time, convergence quality, and memory usage
 across varying population sizes and dimensions for all shared optimizers.
 
 Usage:
-    python benchmarks/run_benchmarks.py          # run all benchmarks
-    python benchmarks/run_benchmarks.py --quick   # quick smoke test
+    python report/benchmarks/run_benchmarks.py
+    python report/benchmarks/run_benchmarks.py --quick
 """
 
 from __future__ import annotations
@@ -13,89 +16,153 @@ from __future__ import annotations
 import argparse
 import gc
 import json
-import os
-import sys
+import logging
 import time
 import tracemalloc
-from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import numpy as np
-
-# ── Otorchmizer (PyTorch) ────────────────────────────────────────────────────
 import torch
-
-from otorchmizer.spaces.search import SearchSpace as TorchSearch
-from otorchmizer.optimizers.swarm.pso import PSO as TorchPSO
-from otorchmizer.optimizers.swarm.woa import WOA as TorchWOA
-from otorchmizer.optimizers.swarm.fa import FA as TorchFA
-from otorchmizer.optimizers.evolutionary.ga import GA as TorchGA
-from otorchmizer.optimizers.misc.hc import HC as TorchHC
-from otorchmizer.core.function import Function as TorchFunction
-from otorchmizer.otorchmizer import Otorchmizer
-
-# ── Opytimizer (NumPy) ──────────────────────────────────────────────────────
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "opytimizer"))
-
-from opytimizer.spaces.search import SearchSpace as NumpySearch
-from opytimizer.optimizers.swarm.pso import PSO as NumpyPSO
-from opytimizer.optimizers.swarm.woa import WOA as NumpyWOA
-from opytimizer.optimizers.swarm.fa import FA as NumpyFA
+import tqdm
+from opytimizer.core.function import Function as NumpyFunction
 from opytimizer.optimizers.evolutionary.ga import GA as NumpyGA
 from opytimizer.optimizers.misc.hc import HC as NumpyHC
-from opytimizer.core.function import Function as NumpyFunction
+from opytimizer.optimizers.swarm.fa import FA as NumpyFA
+from opytimizer.optimizers.swarm.pso import PSO as NumpyPSO
+from opytimizer.optimizers.swarm.woa import WOA as NumpyWOA
 from opytimizer.opytimizer import Opytimizer
+from opytimizer.spaces.search import SearchSpace as NumpySearch
 
-# Suppress logging noise and tqdm during benchmarks
-import logging
-logging.disable(logging.CRITICAL)
+from otorchmizer.core.function import Function as TorchFunction
+from otorchmizer.optimizers.evolutionary.ga import GA as TorchGA
+from otorchmizer.optimizers.misc.hc import HC as TorchHC
+from otorchmizer.optimizers.swarm.fa import FA as TorchFA
+from otorchmizer.optimizers.swarm.pso import PSO as TorchPSO
+from otorchmizer.optimizers.swarm.woa import WOA as TorchWOA
+from otorchmizer.otorchmizer import Otorchmizer
+from otorchmizer.spaces.search import SearchSpace as TorchSearch
 
-import tqdm
-tqdm.tqdm.__init__orig = tqdm.tqdm.__init__
-_orig_init = tqdm.tqdm.__init__
-def _silent_init(self, *args, **kwargs):
-    kwargs["disable"] = True
-    _orig_init(self, *args, **kwargs)
-tqdm.tqdm.__init__ = _silent_init
-
-
-# ============================================================================
-# Benchmark functions (well-known test suite)
-# ============================================================================
 
 def sphere_np(x):
-    return float(np.sum(x ** 2))
+    """Compute the NumPy sphere objective.
+
+    Args:
+        x: Candidate position array.
+
+    Returns:
+        Scalar sum of squared values.
+
+    """
+
+    return float(np.sum(x**2))
+
 
 def rastrigin_np(x):
+    """Compute the NumPy Rastrigin objective.
+
+    Args:
+        x: Candidate position array.
+
+    Returns:
+        Scalar Rastrigin fitness.
+
+    """
+
     A = 10
-    return float(A * len(x) + np.sum(x ** 2 - A * np.cos(2 * np.pi * x)))
+    return float(A * len(x) + np.sum(x**2 - A * np.cos(2 * np.pi * x)))
+
 
 def ackley_np(x):
+    """Compute the NumPy Ackley objective.
+
+    Args:
+        x: Candidate position array.
+
+    Returns:
+        Scalar Ackley fitness.
+
+    """
+
     n = len(x)
     a, b, c = 20, 0.2, 2 * np.pi
-    s1 = np.sum(x ** 2) / n
+    s1 = np.sum(x**2) / n
     s2 = np.sum(np.cos(c * x)) / n
     return float(-a * np.exp(-b * np.sqrt(s1)) - np.exp(s2) + a + np.e)
 
+
 def rosenbrock_np(x):
+    """Compute the NumPy Rosenbrock objective.
+
+    Args:
+        x: Candidate position array.
+
+    Returns:
+        Scalar Rosenbrock fitness.
+
+    """
+
     return float(np.sum(100 * (x[1:] - x[:-1] ** 2) ** 2 + (1 - x[:-1]) ** 2))
 
 
 def sphere_torch(x):
-    return (x ** 2).sum()
+    """Compute the PyTorch sphere objective.
+
+    Args:
+        x: Candidate position tensor.
+
+    Returns:
+        Scalar sum of squared values.
+
+    """
+
+    return (x**2).sum()
+
 
 def rastrigin_torch(x):
+    """Compute the PyTorch Rastrigin objective.
+
+    Args:
+        x: Candidate position tensor.
+
+    Returns:
+        Scalar Rastrigin fitness.
+
+    """
+
     A = 10
-    return A * x.shape[0] + (x ** 2 - A * torch.cos(2 * torch.pi * x)).sum()
+    return A * x.shape[0] + (x**2 - A * torch.cos(2 * torch.pi * x)).sum()
+
 
 def ackley_torch(x):
+    """Compute the PyTorch Ackley objective.
+
+    Args:
+        x: Candidate position tensor.
+
+    Returns:
+        Scalar Ackley fitness.
+
+    """
+
     n = x.shape[0]
     a, b, c = 20.0, 0.2, 2 * torch.pi
-    s1 = (x ** 2).sum() / n
+    s1 = (x**2).sum() / n
     s2 = (torch.cos(c * x)).sum() / n
     return -a * torch.exp(-b * torch.sqrt(s1)) - torch.exp(s2) + a + torch.e
 
+
 def rosenbrock_torch(x):
+    """Compute the PyTorch Rosenbrock objective.
+
+    Args:
+        x: Candidate position tensor with one dimension per variable.
+
+    Returns:
+        Scalar Rosenbrock fitness.
+
+    """
+
     x_flat = x.squeeze()
     return (100 * (x_flat[1:] - x_flat[:-1] ** 2) ** 2 + (1 - x_flat[:-1]) ** 2).sum()
 
@@ -107,33 +174,42 @@ BENCHMARK_FUNCTIONS = {
     "rosenbrock": (rosenbrock_np, rosenbrock_torch),
 }
 
-# ============================================================================
-# Optimizer registry
-# ============================================================================
 
 OPTIMIZERS = {
     "PSO": (NumpyPSO, TorchPSO),
     "WOA": (NumpyWOA, TorchWOA),
-    "FA":  (NumpyFA,  TorchFA),
-    "GA":  (NumpyGA,  TorchGA),
-    "HC":  (NumpyHC,  TorchHC),
+    "FA": (NumpyFA, TorchFA),
+    "GA": (NumpyGA, TorchGA),
+    "HC": (NumpyHC, TorchHC),
 }
 
 # Bounds per benchmark function
 BOUNDS = {
-    "sphere":     (-5.12, 5.12),
-    "rastrigin":  (-5.12, 5.12),
-    "ackley":     (-5.0, 5.0),
+    "sphere": (-5.12, 5.12),
+    "rastrigin": (-5.12, 5.12),
+    "ackley": (-5.0, 5.0),
     "rosenbrock": (-5.0, 10.0),
 }
 
 
-# ============================================================================
-# Result container
-# ============================================================================
-
 @dataclass
 class BenchResult:
+    """Store one aggregated benchmark result.
+
+    Attributes:
+        optimizer: Optimizer class name.
+        function: Objective function name.
+        n_agents: Population size.
+        n_variables: Number of decision variables.
+        n_iterations: Iteration budget.
+        backend: NumPy, PyTorch CPU, or PyTorch CUDA backend identifier.
+        time_seconds: Median elapsed wall-clock time.
+        best_fitness: Median best objective value.
+        peak_memory_mb: Python-heap peak on CPU or PyTorch allocator peak on CUDA.
+        converged: Optional external convergence classification.
+
+    """
+
     optimizer: str
     function: str
     n_agents: int
@@ -146,12 +222,21 @@ class BenchResult:
     converged: bool = False
 
 
-# ============================================================================
-# Runner helpers
-# ============================================================================
-
 def run_numpy(opt_cls, fn_np, n_agents, n_variables, n_iterations, bounds):
-    """Run one opytimizer benchmark and return (time, best_fitness, peak_mem_mb)."""
+    """Run one Opytimizer benchmark.
+
+    Args:
+        opt_cls: Reference optimizer class.
+        fn_np: NumPy objective callable.
+        n_agents: Population size.
+        n_variables: Number of decision variables.
+        n_iterations: Iteration budget.
+        bounds: Shared lower and upper bounds.
+
+    Returns:
+        Tuple of elapsed seconds, best fitness, and traced Python-heap peak in MiB.
+
+    """
 
     lb, ub = bounds
     gc.collect()
@@ -179,7 +264,25 @@ def run_numpy(opt_cls, fn_np, n_agents, n_variables, n_iterations, bounds):
 
 
 def run_torch(opt_cls, fn_torch, n_agents, n_variables, n_iterations, bounds, device="cpu"):
-    """Run one otorchmizer benchmark and return (time, best_fitness, peak_mem_mb)."""
+    """Run one Otorchmizer benchmark.
+
+    Args:
+        opt_cls: Tensor optimizer class.
+        fn_torch: Tensor objective callable.
+        n_agents: Population size.
+        n_variables: Number of decision variables.
+        n_iterations: Iteration budget.
+        bounds: Shared lower and upper bounds.
+        device: Target tensor device.
+
+    Returns:
+        Tuple of elapsed seconds, best fitness, and the backend-specific memory peak in MiB.
+
+    Notes:
+        CPU tracemalloc measures the Python heap, not all native tensor memory.
+        CUDA measurements use the PyTorch allocator and synchronize timing boundaries.
+
+    """
 
     lb, ub = bounds
     gc.collect()
@@ -222,22 +325,38 @@ def run_torch(opt_cls, fn_torch, n_agents, n_variables, n_iterations, bounds, de
     return elapsed, best, mem_mb
 
 
-# ============================================================================
-# Main benchmark
-# ============================================================================
-
 def run_benchmarks(
-    pop_sizes: List[int],
-    dims: List[int],
+    pop_sizes: list[int],
+    dims: list[int],
     n_iterations: int,
-    functions: List[str],
-    optimizers: List[str],
+    functions: list[str],
+    optimizers: list[str],
     n_repeats: int = 3,
     use_gpu: bool = False,
-) -> List[BenchResult]:
-    """Run full benchmark matrix and return results."""
+) -> list[BenchResult]:
+    """Run the requested benchmark matrix.
 
-    results: List[BenchResult] = []
+    Args:
+        pop_sizes: Population sizes to compare.
+        dims: Decision-variable counts to compare.
+        n_iterations: Iteration budget for each run.
+        functions: Registered objective names.
+        optimizers: Registered optimizer names.
+        n_repeats: Number of repetitions summarized by a median.
+        use_gpu: Whether to include CUDA when available.
+
+    Returns:
+        Aggregated results for each executed configuration and backend.
+
+    Raises:
+        ValueError: The repetition count is not positive.
+
+    """
+
+    if n_repeats <= 0:
+        raise ValueError(f"`n_repeats` must be positive, but got {n_repeats}.")
+
+    results: list[BenchResult] = []
     total = len(optimizers) * len(functions) * len(pop_sizes) * len(dims)
     count = 0
 
@@ -260,7 +379,6 @@ def run_benchmarks(
                     label = f"[{count}/{total}] {opt_name}/{fn_name} n={n_agents} d={n_vars}"
                     print(f"  {label} ... ", end="", flush=True)
 
-                    # ── NumPy runs ──
                     np_times, np_fits, np_mems = [], [], []
                     for _ in range(n_repeats):
                         t, f, m = run_numpy(np_cls, fn_np, n_agents, n_vars, n_iterations, bounds)
@@ -268,16 +386,20 @@ def run_benchmarks(
                         np_fits.append(f)
                         np_mems.append(m)
 
-                    results.append(BenchResult(
-                        optimizer=opt_name, function=fn_name,
-                        n_agents=n_agents, n_variables=n_vars,
-                        n_iterations=n_iterations, backend="numpy",
-                        time_seconds=float(np.median(np_times)),
-                        best_fitness=float(np.median(np_fits)),
-                        peak_memory_mb=float(np.median(np_mems)),
-                    ))
+                    results.append(
+                        BenchResult(
+                            optimizer=opt_name,
+                            function=fn_name,
+                            n_agents=n_agents,
+                            n_variables=n_vars,
+                            n_iterations=n_iterations,
+                            backend="numpy",
+                            time_seconds=float(np.median(np_times)),
+                            best_fitness=float(np.median(np_fits)),
+                            peak_memory_mb=float(np.median(np_mems)),
+                        )
+                    )
 
-                    # ── PyTorch CPU runs ──
                     torch_times, torch_fits, torch_mems = [], [], []
                     for _ in range(n_repeats):
                         t, f, m = run_torch(torch_cls, fn_torch, n_agents, n_vars, n_iterations, bounds, "cpu")
@@ -285,16 +407,20 @@ def run_benchmarks(
                         torch_fits.append(f)
                         torch_mems.append(m)
 
-                    results.append(BenchResult(
-                        optimizer=opt_name, function=fn_name,
-                        n_agents=n_agents, n_variables=n_vars,
-                        n_iterations=n_iterations, backend="torch_cpu",
-                        time_seconds=float(np.median(torch_times)),
-                        best_fitness=float(np.median(torch_fits)),
-                        peak_memory_mb=float(np.median(torch_mems)),
-                    ))
+                    results.append(
+                        BenchResult(
+                            optimizer=opt_name,
+                            function=fn_name,
+                            n_agents=n_agents,
+                            n_variables=n_vars,
+                            n_iterations=n_iterations,
+                            backend="torch_cpu",
+                            time_seconds=float(np.median(torch_times)),
+                            best_fitness=float(np.median(torch_fits)),
+                            peak_memory_mb=float(np.median(torch_mems)),
+                        )
+                    )
 
-                    # ── PyTorch GPU runs (optional) ──
                     if use_gpu and torch.cuda.is_available():
                         gpu_times, gpu_fits, gpu_mems = [], [], []
                         for _ in range(n_repeats):
@@ -303,14 +429,19 @@ def run_benchmarks(
                             gpu_fits.append(f)
                             gpu_mems.append(m)
 
-                        results.append(BenchResult(
-                            optimizer=opt_name, function=fn_name,
-                            n_agents=n_agents, n_variables=n_vars,
-                            n_iterations=n_iterations, backend="torch_gpu",
-                            time_seconds=float(np.median(gpu_times)),
-                            best_fitness=float(np.median(gpu_fits)),
-                            peak_memory_mb=float(np.median(gpu_mems)),
-                        ))
+                        results.append(
+                            BenchResult(
+                                optimizer=opt_name,
+                                function=fn_name,
+                                n_agents=n_agents,
+                                n_variables=n_vars,
+                                n_iterations=n_iterations,
+                                backend="torch_gpu",
+                                time_seconds=float(np.median(gpu_times)),
+                                best_fitness=float(np.median(gpu_fits)),
+                                peak_memory_mb=float(np.median(gpu_mems)),
+                            )
+                        )
 
                     # Print speedup summary
                     np_t = float(np.median(np_times))
@@ -326,16 +457,19 @@ def run_benchmarks(
     return results
 
 
-def save_results(results: List[BenchResult], path: str):
-    """Save results to JSON."""
-    with open(path, "w") as f:
+def save_results(results: list[BenchResult], path: str):
+    """Save benchmark records as JSON.
+
+    Args:
+        results: Aggregated benchmark records.
+        path: Destination JSON path.
+
+    """
+
+    with open(path, "w", encoding="utf-8") as f:
         json.dump([asdict(r) for r in results], f, indent=2)
     print(f"\nResults saved to {path}")
 
-
-# ============================================================================
-# CLI
-# ============================================================================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark opytimizer vs otorchmizer")
@@ -343,8 +477,23 @@ if __name__ == "__main__":
     parser.add_argument("--extended", action="store_true", help="Extended mode (larger pop & dims)")
     parser.add_argument("--gpu", action="store_true", help="Include GPU benchmarks")
     parser.add_argument("--repeats", type=int, default=3, help="Number of repeats per config")
-    parser.add_argument("--output", type=str, default="benchmarks/results.json", help="Output JSON path")
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=str(Path("report") / "benchmarks" / "results.json"),
+        help="Output JSON path",
+    )
     args = parser.parse_args()
+
+    # Suppression belongs to the standalone benchmark process, not module import
+    logging.disable(logging.CRITICAL)
+    _orig_init = tqdm.tqdm.__init__
+
+    def _silent_init(self, *args, **kwargs):
+        kwargs["disable"] = True
+        _orig_init(self, *args, **kwargs)
+
+    tqdm.tqdm.__init__ = _silent_init
 
     if args.quick:
         pop_sizes = [10, 50]
@@ -392,6 +541,5 @@ if __name__ == "__main__":
         use_gpu=args.gpu,
     )
 
-    # Ensure output dir exists
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     save_results(results, args.output)

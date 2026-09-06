@@ -1,8 +1,9 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Pareto-frontier search space."""
 
 from __future__ import annotations
-
-from typing import List, Optional, Union
 
 import torch
 
@@ -13,24 +14,24 @@ logger = logging.get_logger(__name__)
 
 
 class ParetoSpace(Space):
-    """Search space for multi-objective optimization with pre-loaded data points.
-
-    Agents are initialized from given data points rather than random sampling.
-    No bound clipping is performed.
-    """
+    """Search space for multi-objective optimization with preloaded data points."""
 
     def __init__(
         self,
         data_points: torch.Tensor,
-        mapping: Optional[List[str]] = None,
-        device: Union[str, torch.device] = "auto",
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
     ) -> None:
-        """Initialization method.
+        """Initialize a Pareto search space.
 
         Args:
-            data_points: Pre-defined data of shape (n_agents, n_variables).
-            mapping: Human-readable variable names.
-            device: Target device.
+            data_points: Predefined data with shape (n_agents, n_variables).
+            mapping: Human-readable names for the decision variables.
+            device: Device used to store population tensors.
+
+        Notes:
+            Agents are initialized from `data_points` instead of random samples, and bound clipping is disabled.
+
         """
 
         logger.info("Creating class: ParetoSpace.")
@@ -56,6 +57,6 @@ class ParetoSpace(Space):
         self.population.initialize_static(self._data_points)
 
     def clip(self) -> None:
-        """No clipping for Pareto spaces."""
+        """Leave Pareto-space positions unchanged."""
 
         pass

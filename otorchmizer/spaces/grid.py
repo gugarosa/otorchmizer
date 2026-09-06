@@ -1,8 +1,9 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Grid-based search space."""
 
 from __future__ import annotations
-
-from typing import List, Optional, Tuple, Union
 
 import torch
 
@@ -14,24 +15,38 @@ logger = logging.get_logger(__name__)
 
 
 class GridSpace(Space):
-    """Search space that exhaustively evaluates a grid of values.
-
-    Creates all combinations of values defined by step sizes and bounds.
-    The number of agents is determined by the grid size.
-    """
+    """Search space that exhaustively evaluates a bounded grid."""
 
     def __init__(
         self,
         n_variables: int,
-        step: Union[float, List, Tuple, torch.Tensor],
-        lower_bound: Union[float, List, Tuple, torch.Tensor],
-        upper_bound: Union[float, List, Tuple, torch.Tensor],
-        mapping: Optional[List[str]] = None,
-        device: Union[str, torch.device] = "auto",
+        step: float | list[float] | tuple[float, ...] | torch.Tensor,
+        lower_bound: float | list[float] | tuple[float, ...] | torch.Tensor,
+        upper_bound: float | list[float] | tuple[float, ...] | torch.Tensor,
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
     ) -> None:
+        """Initialize a grid search space.
+
+        Args:
+            n_variables: Number of decision variables.
+            step: Positive step size for each decision variable.
+            lower_bound: Lower bound for each decision variable.
+            upper_bound: Upper bound for each decision variable.
+            mapping: Human-readable names for the decision variables.
+            device: Device used to store population tensors.
+
+        Raises:
+            SizeError: If `step` does not contain one value per decision variable.
+            ValueError: If `step` contains a nonfinite or nonpositive value.
+
+        Notes:
+            The Cartesian product of the bounded ranges determines the number of agents.
+
+        """
+
         logger.info("Creating class: GridSpace.")
 
-        # Initialize with n_agents=1 (will be overridden by grid creation)
         super().__init__(
             n_agents=1,
             n_variables=n_variables,
@@ -44,6 +59,10 @@ class GridSpace(Space):
 
         step_t = self._to_tensor(step, n_variables)
         self.step = step_t.to(self.device)
+        if self.step.shape != (n_variables,):
+            raise e.SizeError(f"`step` must have shape {(n_variables,)}, but got {tuple(self.step.shape)}.")
+        if not torch.isfinite(self.step).all() or (self.step <= 0).any():
+            raise e.ValueError("`step` must contain finite positive values.")
 
         self._create_grid()
         self.build()
@@ -51,20 +70,23 @@ class GridSpace(Space):
         logger.info("Class created.")
 
     def _create_grid(self) -> None:
-        """Creates a grid of all possible search values using torch.meshgrid."""
-
         lb = self.population.lb.squeeze(-1)
         ub = self.population.ub.squeeze(-1)
         step = self.step
 
         ranges = [
-            torch.arange(lb[i].item(), ub[i].item() + step[i].item(), step[i].item(),
-                         device=self.device)
+            torch.arange(
+                lb[i].item(),
+                ub[i].item() + step[i].item(),
+                step[i].item(),
+                device=self.device,
+            )
             for i in range(self.population.n_variables)
         ]
+        ranges = [values[values <= ub[i]] for i, values in enumerate(ranges)]
 
         mesh = torch.meshgrid(*ranges, indexing="ij")
-        grid = torch.stack([m.ravel() for m in mesh], dim=1)  # (n_grid, n_vars)
+        grid = torch.stack([m.ravel() for m in mesh], dim=1)
 
         n_grid = grid.shape[0]
         new_lb = self.population.lb
@@ -83,6 +105,4 @@ class GridSpace(Space):
         self.grid = grid
 
     def _initialize(self) -> None:
-        """Initializes agents at grid positions."""
-
         self.population.initialize_static(self.grid)

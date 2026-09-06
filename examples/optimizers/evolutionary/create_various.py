@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 from otorchmizer.optimizers.evolutionary import DE, HS, IHS
 
 # Differential Evolution

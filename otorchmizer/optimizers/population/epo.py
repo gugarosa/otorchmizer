@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Emperor Penguin Optimizer.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,12 +23,16 @@ logger = logging.get_logger(__name__)
 
 
 class EPO(Optimizer):
-    """Emperor Penguin Optimizer.
+    """Apply temperature-based emperor penguin huddle dynamics."""
 
-    Temperature-based huddle dynamics.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> EPO.")
 
         self.f = 2.0
@@ -37,51 +44,63 @@ class EPO(Optimizer):
 
     @property
     def f(self) -> float:
+        """Return the exploration control parameter."""
+
         return self._f
 
     @f.setter
     def f(self, f: float) -> None:
         if not isinstance(f, (float, int)):
-            raise e.TypeError("`f` should be a float or integer")
+            raise e.TypeError("`f` must be a float or integer.")
         self._f = f
 
     @property
-    def l(self) -> float:
+    def l(self) -> float:  # noqa: E743
+        """Return the exploitation control parameter."""
+
         return self._l
 
     @l.setter
-    def l(self, l: float) -> None:
+    def l(self, l: float) -> None:  # noqa: E741, E743
         if not isinstance(l, (float, int)):
-            raise e.TypeError("`l` should be a float or integer")
+            raise e.TypeError("`l` must be a float or integer.")
         self._l = l
 
     def update(self, ctx: UpdateContext) -> None:
+        """Move agents according to temperature and huddle geometry.
+
+        Args:
+            ctx: Current optimization state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
-        t = ctx.iteration + 1
+        t = ctx.iteration
         T = max(ctx.n_iterations, 1)
 
-        R = torch.rand(n, 1, 1, device=device)
-        T_flag = (R >= 0.5).float()
+        R = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        T_flag = (R >= 0.5).to(pop.dtype)
 
-        # Temperature profile
-        T_p = T_flag - T / (t - T + 1e-10)
+        remaining = max(T - t, 1)
+        T_p = T_flag + T / remaining
 
-        # Polygon grid accuracy
         P_grid = torch.abs(best - pop.positions)
 
-        r1 = torch.rand(n, 1, 1, device=device)
-        C = torch.rand(n, 1, 1, device=device)
+        r1 = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        C = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
 
-        # Avoidance coefficient
         A = 2 * (T_p + P_grid) * r1 - T_p
 
-        # Social forces
-        S = (torch.abs(self.f * torch.exp(torch.tensor(-t / self.l, device=device)) - torch.exp(torch.tensor(-t, dtype=torch.float32, device=device)))) ** 2
+        S = (
+            torch.abs(
+                self.f * torch.exp(torch.tensor(-t / self.l, device=device, dtype=pop.dtype))
+                - torch.exp(torch.tensor(-t, device=device, dtype=pop.dtype))
+            )
+        ) ** 2
 
-        # Distance
         D_ep = torch.abs(S * best - C * pop.positions)
 
         pop.positions = best - A * D_ep

@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Coyote Optimization Algorithm.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,12 +23,16 @@ logger = logging.get_logger(__name__)
 
 
 class COA(Optimizer):
-    """Coyote Optimization Algorithm.
+    """Apply pack-based cultural tendency with alpha leadership."""
 
-    Pack-based cultural tendency with alpha leadership.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> COA.")
 
         self.n_p = 2
@@ -36,20 +43,39 @@ class COA(Optimizer):
 
     @property
     def n_p(self) -> int:
+        """Return the number of coyote packs."""
+
         return self._n_p
 
     @n_p.setter
     def n_p(self, n_p: int) -> None:
         if not isinstance(n_p, int):
-            raise e.TypeError("`n_p` should be an integer")
+            raise e.TypeError("`n_p` must be an integer.")
         if n_p <= 0:
-            raise e.ValueError("`n_p` should be > 0")
+            raise e.ValueError("`n_p` must be positive.")
         self._n_p = n_p
 
     def compile(self, population) -> None:
+        """Calculate the nominal coyotes per pack.
+
+        Args:
+            population: Population whose agents are divided into packs.
+
+        """
+
+        if self.n_p > population.n_agents:
+            raise e.ValueError("`n_p` must not exceed `population.n_agents`.")
+
         self.n_c = population.n_agents // self.n_p
 
     def update(self, ctx: UpdateContext) -> None:
+        """Update each pack and optionally exchange coyotes.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -65,22 +91,20 @@ class COA(Optimizer):
             pack_fit = pop.fitness[start:end]
             pack_n = pack_pos.shape[0]
 
-            # Sort pack by fitness
             sorted_idx = torch.argsort(pack_fit)
             pack_pos = pack_pos[sorted_idx]
             pack_fit = pack_fit[sorted_idx]
 
             alpha = pack_pos[0].unsqueeze(0)
 
-            # Cultural tendency (median)
             tendency = pack_pos.median(dim=0).values.unsqueeze(0)
 
             for j in range(pack_n):
                 cr1 = torch.randint(0, pack_n, (1,), device=device).item()
                 cr2 = torch.randint(0, pack_n, (1,), device=device).item()
 
-                r1 = torch.rand(1, 1, device=device)
-                r2 = torch.rand(1, 1, device=device)
+                r1 = torch.rand(1, 1, device=device, dtype=pop.dtype)
+                r2 = torch.rand(1, 1, device=device, dtype=pop.dtype)
 
                 lambda1 = alpha.squeeze(0) - pack_pos[cr1]
                 lambda2 = tendency.squeeze(0) - pack_pos[cr2]
@@ -96,9 +120,8 @@ class COA(Optimizer):
             pop.positions[start:end] = pack_pos[torch.argsort(sorted_idx)]
             pop.fitness[start:end] = pack_fit[torch.argsort(sorted_idx)]
 
-        # Pack transition
         p_e = 0.005 * n
-        if torch.rand(1, device=device).item() < p_e:
+        if torch.rand(1, device=device, dtype=pop.dtype).item() < p_e:
             i = torch.randint(0, n, (1,), device=device).item()
             j = torch.randint(0, n, (1,), device=device).item()
             pop.positions[[i, j]] = pop.positions[[j, i]]

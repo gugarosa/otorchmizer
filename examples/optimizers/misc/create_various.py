@@ -1,4 +1,7 @@
-from otorchmizer.optimizers.misc import HC, GS, CEM
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
+from otorchmizer.optimizers.misc import CEM, GS, HC
 
 # Hill Climbing
 hc = HC(params={"r_mean": 0.0, "r_var": 0.1})

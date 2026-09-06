@@ -1,5 +1,13 @@
 # Opytimizer → Otorchmizer Migration Report
 
+> **Archived measurements and conclusions (February 2026):** this report is retained
+> for provenance. Its test counts, migration-completeness statements, and performance
+> claims are not current assurances. The benchmark harness covers five optimizer
+> classes, and subsequent reviews have found defects that the original smoke tests
+> did not detect. Reproduce equivalent workloads before applying these numbers to
+> another revision, algorithm, dtype, or device. CPU `tracemalloc` measurements do
+> not include all native tensor allocations and are not total process-memory peaks.
+
 ## From NumPy to PyTorch: Modernizing a Meta-Heuristic Optimization Framework
 
 **Date:** February 16, 2026
@@ -136,15 +144,17 @@ The single most impactful design change: replacing `List[Agent]` (individual Pyt
 ```python
 # BEFORE (opytimizer): List of individual Agent objects
 class Agent:
-    position: np.ndarray   # shape (n_variables, n_dimensions)
+    position: np.ndarray  # shape (n_variables, n_dimensions)
     fitness: float
+
 
 space.agents: List[Agent]  # n_agents separate objects
 
+
 # AFTER (otorchmizer): Single Population with batched tensors
 class Population:
-    positions: torch.Tensor   # shape (n_agents, n_variables, n_dimensions)
-    fitness: torch.Tensor     # shape (n_agents,)
+    positions: torch.Tensor  # shape (n_agents, n_variables, n_dimensions)
+    fitness: torch.Tensor  # shape (n_agents,)
     best_positions: torch.Tensor
     best_fitness: torch.Tensor
 ```
@@ -174,7 +184,8 @@ Users write fitness functions for a single agent; `torch.vmap` automatically vec
 ```python
 # User writes:
 def sphere(x):
-    return (x ** 2).sum()
+    return (x**2).sum()
+
 
 # Framework applies vmap → evaluates all agents in one call
 batched_fn = torch.vmap(sphere)
@@ -187,7 +198,7 @@ A `DeviceManager` class handles CPU/GPU/multi-GPU resolution:
 
 ```python
 dm = DeviceManager("auto")  # Selects CUDA if available, else CPU
-dm = DeviceManager("cpu")   # Force CPU
+dm = DeviceManager("cpu")  # Force CPU
 dm = DeviceManager("cuda:0")  # Specific GPU
 ```
 
@@ -672,7 +683,7 @@ Additionally, the following advanced GPU features have been implemented:
 
 ```python
 gpus = DeviceManager.available_gpus()
-sub_pops = population.scatter(gpus)     # split across GPUs
+sub_pops = population.scatter(gpus)  # split across GPUs
 # ... run optimizer on each sub_pop ...
 merged = Population.gather(sub_pops, gpus[0])  # merge back
 ```
@@ -682,7 +693,7 @@ merged = Population.gather(sub_pops, gpus[0])  # merge back
 `Population` now accepts a `dtype` parameter, and `DeviceManager.autocast()` provides automatic mixed-precision for eligible operations:
 
 ```python
-pop = Population(..., dtype=torch.float16)     # half-precision population
+pop = Population(..., dtype=torch.float16)  # half-precision population
 dm = DeviceManager("cuda:0", dtype=torch.float16)
 with dm.autocast():
     fitness = function(pop.positions)

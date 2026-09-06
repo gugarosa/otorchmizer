@@ -1,14 +1,15 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Remaining science-based optimizers: AIG, CDO, EFO, ESA, HGSO, LSA, MOA, SMA, TEO, TWO, WEO."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-import otorchmizer.math.distribution as d
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.utils import logging
 
@@ -18,17 +19,30 @@ logger = logging.get_logger(__name__)
 class AIG(Optimizer):
     """Algorithm of the Innovative Gunner."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the AIG optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.alpha = 3.14159
         self.beta = 3.14159
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one AIG step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
         n = pop.n_agents
-        best = pop.best_position.unsqueeze(0)
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
@@ -54,20 +68,40 @@ class AIG(Optimizer):
 class CDO(Optimizer):
     """Chernobyl Disaster Optimizer."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the CDO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         shape = (population.n_variables, population.n_dimensions)
-        device = population.device
-        self.gamma_pos = torch.zeros(shape, device=device)
-        self.beta_pos = torch.zeros(shape, device=device)
-        self.alpha_pos = torch.zeros(shape, device=device)
-        self.gamma_fit = torch.tensor(c.FLOAT_MAX, device=device)
-        self.beta_fit = torch.tensor(c.FLOAT_MAX, device=device)
-        self.alpha_fit = torch.tensor(c.FLOAT_MAX, device=device)
+        self.gamma_pos = population.positions.new_zeros(shape)
+        self.beta_pos = population.positions.new_zeros(shape)
+        self.alpha_pos = population.positions.new_zeros(shape)
+        self.gamma_fit = population.fitness.new_full((), torch.inf)
+        self.beta_fit = population.fitness.new_full((), torch.inf)
+        self.alpha_fit = population.fitness.new_full((), torch.inf)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one CDO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -108,7 +142,14 @@ class CDO(Optimizer):
 class EFO(Optimizer):
     """Electromagnetic Field Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the EFO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.positive_field = 0.1
         self.negative_field = 0.5
         self.ps_ratio = 0.1
@@ -116,6 +157,13 @@ class EFO(Optimizer):
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one EFO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -147,7 +195,10 @@ class EFO(Optimizer):
                     new_pos[j] = neu_val + phi * force * (pos_val - neu_val) + force * (neg_val - neu_val)
 
                 if torch.rand(1, device=device).item() < self.r_ratio:
-                    new_pos[j] = torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j]) + lb.squeeze(0)[j]
+                    new_pos[j] = (
+                        torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j])
+                        + lb.squeeze(0)[j]
+                    )
 
             new_pos = new_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))
             new_fit = fn(new_pos.unsqueeze(0))[0]
@@ -161,20 +212,39 @@ class EFO(Optimizer):
 class ESA(Optimizer):
     """Electro-Search Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the ESA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.n_electrons = 5
         super().__init__(params)
 
     def compile(self, population) -> None:
-        shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.D = torch.rand(shape, device=population.device)
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
+        self.D = torch.rand_like(population.positions)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one ESA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
         n = pop.n_agents
-        best = pop.best_position.unsqueeze(0)
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
@@ -185,7 +255,7 @@ class ESA(Optimizer):
             for _ in range(self.n_electrons):
                 n_level = torch.randint(2, 7, (1,), device=device).item()
                 r = torch.rand_like(pop.positions[i]) * 2 - 1
-                electron_pos = pop.positions[i] + r * (1 - 1.0 / n_level ** 2) / self.D[i]
+                electron_pos = pop.positions[i] + r * (1 - 1.0 / n_level**2) / self.D[i]
                 electron_pos = electron_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))
                 electron_fit = fn(electron_pos.unsqueeze(0))[0]
 
@@ -202,7 +272,14 @@ class ESA(Optimizer):
 class HGSO(Optimizer):
     """Henry Gas Solubility Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the HGSO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.n_clusters = 2
         self.alpha = 1.0
         self.beta = 1.0
@@ -213,13 +290,26 @@ class HGSO(Optimizer):
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         n = population.n_agents
-        device = population.device
-        self.coeff = torch.full((n,), self.l1, device=device)
-        self.pressure = torch.full((n,), self.l2, device=device)
-        self.constant = torch.full((n,), self.l3, device=device)
+        self.coeff = population.fitness.new_full((n,), self.l1)
+        self.pressure = population.fitness.new_full((n,), self.l2)
+        self.constant = population.fitness.new_full((n,), self.l3)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one HGSO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -240,7 +330,11 @@ class HGSO(Optimizer):
             flag = 1 if torch.rand(1, device=device).item() > 0.5 else -1
 
             r = torch.rand(1, 1, device=device)
-            new_pos = pop.positions[i] + flag * r * gamma * (best.squeeze(0) - pop.positions[i]) + self.alpha * r * solubility * (pop.positions[sorted_idx[i % n]] - pop.positions[i])
+            new_pos = (
+                pop.positions[i]
+                + flag * r * gamma * (best.squeeze(0) - pop.positions[i])
+                + self.alpha * r * solubility * (pop.positions[sorted_idx[i % n]] - pop.positions[i])
+            )
             new_pos = new_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))
             new_fit = fn(new_pos.unsqueeze(0))[0]
 
@@ -251,27 +345,48 @@ class HGSO(Optimizer):
         # Replace worst 10-20%
         n_replace = max(int(n * 0.1), 1)
         worst_idx = torch.argsort(pop.fitness, descending=True)[:n_replace]
-        pop.positions[worst_idx] = torch.rand(n_replace, pop.n_variables, pop.n_dimensions, device=device) * (ub - lb) + lb
+        pop.positions[worst_idx] = (
+            torch.rand(n_replace, pop.n_variables, pop.n_dimensions, device=device) * (ub - lb) + lb
+        )
         pop.fitness[worst_idx] = fn(pop.positions[worst_idx])
 
 
 class LSA(Optimizer):
     """Lightning Search Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the LSA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.max_time = 10
         self.E = 2.05
         self.p_fork = 0.01
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         self.time = 0
-        n = population.n_agents
-        self.direction = torch.sign(torch.randn(n, population.n_variables, population.n_dimensions, device=population.device))
+        self.direction = torch.sign(torch.randn_like(population.positions))
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one LSA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
-        fn = ctx.function
         device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
@@ -293,13 +408,18 @@ class LSA(Optimizer):
             noise = torch.randn_like(pop.positions[i])
 
             if r.item() < 0.5:
-                pop.positions[i] = pop.positions[i] + energy * self.direction[i] * torch.abs(noise) * (best.squeeze(0) - pop.positions[i])
+                pop.positions[i] = pop.positions[i] + energy * self.direction[i] * torch.abs(noise) * (
+                    best.squeeze(0) - pop.positions[i]
+                )
             else:
                 pop.positions[i] = best.squeeze(0) + energy * noise
 
             if torch.rand(1, device=device).item() < self.p_fork:
                 j = torch.randint(0, pop.n_variables, (1,), device=device).item()
-                pop.positions[i, j] = torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j]) + lb.squeeze(0)[j]
+                pop.positions[i, j] = (
+                    torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j])
+                    + lb.squeeze(0)[j]
+                )
 
         pop.positions = pop.positions.clamp(min=lb, max=ub)
 
@@ -307,17 +427,30 @@ class LSA(Optimizer):
 class MOA(Optimizer):
     """Magnetic Optimization Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the MOA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.alpha = 1.0
         self.rho = 2.0
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one MOA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
 
-        sorted_idx = torch.argsort(pop.fitness)
         worst_fit = pop.fitness.max()
         best_fit = pop.fitness.min()
 
@@ -342,15 +475,36 @@ class MOA(Optimizer):
 class SMA(Optimizer):
     """Slime Mould Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the SMA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.z = 0.03
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.weight = torch.ones(shape, device=population.device)
+        self.weight = population.positions.new_ones(shape)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one SMA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -362,12 +516,12 @@ class SMA(Optimizer):
         sorted_idx = torch.argsort(pop.fitness)
         best_fit = pop.fitness[sorted_idx[0]]
         worst_fit = pop.fitness[sorted_idx[-1]]
-        fit_range = worst_fit - best_fit + c.EPSILON
+        fit_range = (worst_fit - best_fit).clamp_min(torch.finfo(pop.fitness.dtype).eps)
 
         # Update weights
         for rank, idx in enumerate(sorted_idx):
-            r = torch.rand(pop.n_variables, pop.n_dimensions, device=device)
-            log_val = torch.log10((best_fit - pop.fitness[idx]) / fit_range + 1).abs()
+            r = torch.rand_like(self.weight[idx])
+            log_val = torch.log10((pop.fitness[idx] - best_fit) / fit_range + 1)
             if rank < n // 2:
                 self.weight[idx] = 1 + r * log_val
             else:
@@ -398,7 +552,14 @@ class SMA(Optimizer):
 class TEO(Optimizer):
     """Thermal Exchange Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the TEO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.c1 = 1.0
         self.c2 = 1.0
         self.pro = 0.05
@@ -406,10 +567,24 @@ class TEO(Optimizer):
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         self.environment = population.positions.clone()
         self.TM = []
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one TEO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -421,7 +596,7 @@ class TEO(Optimizer):
         # Thermal memory
         self.TM.append(pop.best_position.clone())
         if len(self.TM) > self.n_TM:
-            self.TM = self.TM[-self.n_TM:]
+            self.TM = self.TM[-self.n_TM :]
 
         # Replace worst with TM members
         sorted_idx = torch.argsort(pop.fitness, descending=True)
@@ -438,11 +613,14 @@ class TEO(Optimizer):
         worst_fit = pop.fitness.max()
         for i in range(n):
             beta = pop.fitness[i] / (worst_fit + 1e-10)
-            pop.positions[i] = pop.positions[i] + (self.environment[i] - pop.positions[i]) * torch.exp(torch.tensor(-beta * t, device=device))
+            pop.positions[i] = pop.positions[i] + (self.environment[i] - pop.positions[i]) * torch.exp(-beta * t)
 
             if torch.rand(1, device=device).item() < self.pro:
                 j = torch.randint(0, pop.n_variables, (1,), device=device).item()
-                pop.positions[i, j] = torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j]) + lb.squeeze(0)[j]
+                pop.positions[i, j] = (
+                    torch.rand(pop.n_dimensions, device=device) * (ub.squeeze(0)[j] - lb.squeeze(0)[j])
+                    + lb.squeeze(0)[j]
+                )
 
         pop.positions = pop.positions.clamp(min=lb, max=ub)
 
@@ -450,7 +628,14 @@ class TEO(Optimizer):
 class TWO(Optimizer):
     """Tug of War Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the TWO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.mu_s = 1.0
         self.mu_k = 1.0
         self.delta_t = 1.0
@@ -459,8 +644,14 @@ class TWO(Optimizer):
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one TWO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
-        fn = ctx.function
         device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
@@ -468,7 +659,6 @@ class TWO(Optimizer):
         ub = pop.ub.unsqueeze(0)
         t = ctx.iteration + 1
 
-        sorted_idx = torch.argsort(pop.fitness)
         worst_fit = pop.fitness.max()
         best_fit = pop.fitness.min()
         weights = (pop.fitness - worst_fit) / (best_fit - worst_fit + c.EPSILON) + 1
@@ -485,7 +675,10 @@ class TWO(Optimizer):
                 force = (weights[j] - weights[i]) / dist
                 accel = force / (weights[i] + 1e-10)
                 r = torch.rand(1, device=device)
-                delta += 0.5 * accel * self.delta_t ** 2 + self.alpha_val ** t * self.beta_val * (ub.squeeze(0) - lb.squeeze(0)) * r
+                delta += (
+                    0.5 * accel * self.delta_t**2
+                    + self.alpha_val**t * self.beta_val * (ub.squeeze(0) - lb.squeeze(0)) * r
+                )
 
             new_positions[i] = pop.positions[i] + delta
 
@@ -503,7 +696,14 @@ class TWO(Optimizer):
 class WEO(Optimizer):
     """Water Evaporation Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the WEO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.E_min = -3.5
         self.E_max = -0.5
         self.theta_min = -torch.pi / 3.6
@@ -511,6 +711,13 @@ class WEO(Optimizer):
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one WEO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -531,7 +738,7 @@ class WEO(Optimizer):
                 # Droplet evaporation
                 theta = self.theta_max - (self.theta_max - self.theta_min) * (t - 0.5) * 2
                 cos_t = torch.cos(torch.tensor(theta, device=device))
-                J = (1 / 2.6) * ((2 / 3 + cos_t ** 3 / 3 - cos_t).clamp(min=1e-10) ** (-2 / 3)) * (1 - cos_t)
+                J = (1 / 2.6) * ((2 / 3 + cos_t**3 / 3 - cos_t).clamp(min=1e-10) ** (-2 / 3)) * (1 - cos_t)
                 r = torch.rand_like(pop.positions[i])
                 MEP = (r < J).float()
 

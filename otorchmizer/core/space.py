@@ -1,12 +1,12 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Base search space managing a Population of candidates."""
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Union
-
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
@@ -17,8 +17,9 @@ logger = logging.get_logger(__name__)
 class Space:
     """Base class for all search spaces.
 
-    Manages a Population (batched tensor storage) and handles
-    initialization, bound enforcement, and device placement.
+    Notes:
+        Manages batched population storage, initialization, bound enforcement, and device placement.
+
     """
 
     def __init__(
@@ -26,12 +27,12 @@ class Space:
         n_agents: int = 1,
         n_variables: int = 1,
         n_dimensions: int = 1,
-        lower_bound: Union[float, List, Tuple, torch.Tensor] = 0.0,
-        upper_bound: Union[float, List, Tuple, torch.Tensor] = 1.0,
-        mapping: Optional[List[str]] = None,
-        device: Union[str, torch.device] = "auto",
+        lower_bound: float | list | tuple | torch.Tensor = 0.0,
+        upper_bound: float | list | tuple | torch.Tensor = 1.0,
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
     ) -> None:
-        """Initialization method.
+        """Allocate an unbuilt population with broadcastable bounds.
 
         Args:
             n_agents: Number of candidate solutions.
@@ -41,6 +42,7 @@ class Space:
             upper_bound: Maximum possible values.
             mapping: Human-readable variable names.
             device: Device for tensor storage ("auto", "cpu", "cuda:0", etc.).
+
         """
 
         self.device = DeviceManager(device).device
@@ -61,10 +63,7 @@ class Space:
         self.built = False
 
     @staticmethod
-    def _to_tensor(value: Union[float, List, Tuple, torch.Tensor],
-                   n_variables: int) -> torch.Tensor:
-        """Converts bound values to a tensor."""
-
+    def _to_tensor(value: float | list | tuple | torch.Tensor, n_variables: int) -> torch.Tensor:
         if isinstance(value, torch.Tensor):
             return value.float()
         if isinstance(value, (int, float)):
@@ -73,6 +72,8 @@ class Space:
 
     @property
     def built(self) -> bool:
+        """Whether the space has completed population initialization."""
+
         return self._built
 
     @built.setter
@@ -81,22 +82,32 @@ class Space:
 
     @property
     def n_agents(self) -> int:
+        """Number of candidate solutions in the population."""
+
         return self.population.n_agents
 
     @property
     def n_variables(self) -> int:
+        """Number of decision variables per candidate."""
+
         return self.population.n_variables
 
     @property
     def n_dimensions(self) -> int:
+        """Number of dimensions per decision variable."""
+
         return self.population.n_dimensions
 
     @property
     def best_position(self) -> torch.Tensor:
+        """Tracked best position shaped (n_variables, n_dimensions)."""
+
         return self.population.best_position
 
     @property
     def best_fitness(self) -> torch.Tensor:
+        """Tracked best fitness as a scalar tensor."""
+
         return self.population.best_fitness
 
     def build(self) -> None:
@@ -115,8 +126,6 @@ class Space:
         )
 
     def _initialize(self) -> None:
-        """Initializes agent positions. Override in subclasses."""
-
         self.population.initialize_uniform()
 
     def clip(self) -> None:
@@ -126,6 +135,5 @@ class Space:
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(n_agents={self.n_agents}, "
-            f"n_variables={self.n_variables}, device={self.device})"
+            f"{self.__class__.__name__}(n_agents={self.n_agents}, n_variables={self.n_variables}, device={self.device})"
         )

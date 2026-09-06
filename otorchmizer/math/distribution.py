@@ -1,27 +1,30 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """PyTorch-native distribution generators."""
 
 from __future__ import annotations
 
 from math import gamma, pi, sin
-from typing import Tuple, Union
 
 import torch
 
 
 def generate_bernoulli_distribution(
     prob: float = 0.0,
-    size: Union[int, Tuple[int, ...]] = 1,
+    size: int | tuple[int, ...] = 1,
     device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
-    """Generates a Bernoulli distribution.
+    """Generate values from a Bernoulli distribution.
 
     Args:
-        prob: Probability of 1.
+        prob: Probability of sampling one.
         size: Shape of the output tensor.
         device: Target device.
 
     Returns:
-        Binary tensor sampled from Bernoulli(prob).
+        Binary tensor sampled from the Bernoulli distribution.
+
     """
 
     if isinstance(size, int):
@@ -34,15 +37,16 @@ def generate_choice_distribution(
     probs: torch.Tensor,
     size: int,
 ) -> torch.Tensor:
-    """Generates a random choice distribution based on probabilities.
+    """Sample indices according to the supplied probability weights.
 
     Args:
         n: Number of elements to choose from.
-        probs: Probability weights (must be on correct device already).
+        probs: Probability weights on the target device.
         size: Number of samples to draw.
 
     Returns:
-        Tensor of selected indices (without replacement).
+        Selected indices sampled without replacement.
+
     """
 
     return torch.multinomial(probs, size, replacement=False)
@@ -50,14 +54,10 @@ def generate_choice_distribution(
 
 def generate_levy_distribution(
     beta: float = 0.1,
-    size: Union[int, Tuple[int, ...]] = 1,
+    size: int | tuple[int, ...] = 1,
     device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
-    """Generates a Lévy flight distribution.
-
-    References:
-        X.-S. Yang and S. Deb. Multiobjective Cuckoo Search for Design Optimization.
-        Computers & Operations Research (2013).
+    """Generate values from a Lévy flight distribution.
 
     Args:
         beta: Skewness parameter.
@@ -66,6 +66,11 @@ def generate_levy_distribution(
 
     Returns:
         Lévy distributed random tensor.
+
+    References:
+        X.-S. Yang and S. Deb. Multiobjective Cuckoo Search for Design Optimization.
+        Computers & Operations Research (2013).
+
     """
 
     if isinstance(size, int):

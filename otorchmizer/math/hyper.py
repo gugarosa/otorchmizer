@@ -1,23 +1,30 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Hypercomplex mathematical utilities (PyTorch-native)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Union
 
 import torch
 
+TensorFunction = Callable[[torch.Tensor], torch.Tensor]
+
 
 def norm(array: torch.Tensor) -> torch.Tensor:
-    """Calculates the norm over the dimension axis.
-
-    Maps a hypercomplex number to a real-valued space (first step).
+    """Map hypercomplex values to real-valued norms.
 
     Args:
         array: 2D tensor of shape (n_variables, n_dimensions).
 
     Returns:
         Norm tensor of shape (n_variables,).
+
+    Notes:
+        This is the first step in mapping a hypercomplex number to a real-valued space.
+
     """
 
     return torch.linalg.norm(array, dim=1)
@@ -28,7 +35,7 @@ def span(
     lower_bound: torch.Tensor,
     upper_bound: torch.Tensor,
 ) -> torch.Tensor:
-    """Spans a hypercomplex number between lower and upper bounds.
+    """Map a hypercomplex number between lower and upper bounds.
 
     Args:
         array: 2D tensor of shape (n_variables, n_dimensions).
@@ -37,6 +44,7 @@ def span(
 
     Returns:
         Spanned values usable as decision variables.
+
     """
 
     lb = lower_bound.to(array.device)
@@ -54,8 +62,8 @@ def span(
 def span_to_hyper_value(
     lb: torch.Tensor,
     ub: torch.Tensor,
-) -> callable:
-    """Decorator that spans hypercomplex inputs to real-valued bounds.
+) -> Callable[[TensorFunction], TensorFunction]:
+    """Create a decorator that maps hypercomplex inputs to real-valued bounds.
 
     Args:
         lb: Lower bounds.
@@ -63,12 +71,14 @@ def span_to_hyper_value(
 
     Returns:
         Decorator wrapping the objective function.
+
     """
 
-    def _decorator(f: callable) -> callable:
+    def _decorator(f: TensorFunction) -> TensorFunction:
         @wraps(f)
         def _wrapper(x: torch.Tensor) -> torch.Tensor:
             return f(span(x, lb, ub))
+
         return _wrapper
 
     return _decorator

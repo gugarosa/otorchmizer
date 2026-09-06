@@ -1,10 +1,13 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for core.node — binary tree nodes for GP expression trees."""
 
 import pytest
 import torch
 
-from otorchmizer.core.node import Node
 import otorchmizer.utils.exception as e
+from otorchmizer.core.node import Node
 
 
 class TestNodeCreation:
@@ -77,7 +80,6 @@ class TestNodeValidation:
 class TestTreeStructure:
     @pytest.fixture
     def simple_tree(self):
-        """Creates: SUM(terminal_0, terminal_1)"""
         root = Node("SUM", "FUNCTION")
         left = Node(0, "TERMINAL", value=torch.tensor([3.0]))
         right = Node(1, "TERMINAL", value=torch.tensor([4.0]))
@@ -182,7 +184,6 @@ class TestTreeEvaluation:
 
 class TestDeepTree:
     def test_depth_3_tree(self):
-        """Build SUM(MUL(2, 3), 4) = 10"""
         mul_node = Node("MUL", "FUNCTION")
         t2 = Node(0, "TERMINAL", value=torch.tensor([2.0]))
         t3 = Node(1, "TERMINAL", value=torch.tensor([3.0]))

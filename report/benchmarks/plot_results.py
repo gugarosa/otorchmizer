@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Generate benchmark comparison plots.
 
 Reads results.json produced by run_benchmarks.py and generates:
@@ -8,8 +11,8 @@ Reads results.json produced by run_benchmarks.py and generates:
 5. Combined summary dashboard
 
 Usage:
-    python benchmarks/plot_results.py                      # default
-    python benchmarks/plot_results.py --input results.json # custom input
+    python report/benchmarks/plot_results.py
+    python report/benchmarks/plot_results.py --input results.json
 """
 
 from __future__ import annotations
@@ -18,17 +21,28 @@ import argparse
 import json
 import os
 from collections import defaultdict
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any
 
-import numpy as np
 import matplotlib
+import numpy as np
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 
 
-def load_results(path: str) -> List[Dict[str, Any]]:
-    with open(path) as f:
+def load_results(path: str) -> list[dict[str, Any]]:
+    """Read benchmark records from JSON.
+
+    Args:
+        path: Input JSON path.
+
+    Returns:
+        Decoded benchmark records.
+
+    """
+
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -43,21 +57,25 @@ def pair_results(results):
     pairs = []
     for key, backends in index.items():
         if "numpy" in backends and "torch_cpu" in backends:
-            pairs.append({
-                "key": key,
-                "numpy": backends["numpy"],
-                "torch_cpu": backends["torch_cpu"],
-                "torch_gpu": backends.get("torch_gpu"),
-            })
+            pairs.append(
+                {
+                    "key": key,
+                    "numpy": backends["numpy"],
+                    "torch_cpu": backends["torch_cpu"],
+                    "torch_gpu": backends.get("torch_gpu"),
+                }
+            )
     return pairs
 
 
-# ============================================================================
-# Plot 1: Speedup bar chart per optimizer (aggregated across functions)
-# ============================================================================
-
 def plot_speedup_bars(pairs, outdir):
-    """Bar chart showing average speedup per optimizer across all configurations."""
+    """Bar chart showing average speedup per optimizer across all configurations.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     opt_speedups = defaultdict(list)
     for p in pairs:
@@ -74,15 +92,28 @@ def plot_speedup_bars(pairs, outdir):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(opts))
-    bars = ax.bar(x, means, yerr=stds, capsize=5, color="#2196F3", edgecolor="#1565C0",
-                  alpha=0.85, zorder=3)
+    bars = ax.bar(x, means, yerr=stds, capsize=5, color="#2196F3", edgecolor="#1565C0", alpha=0.85, zorder=3)
 
     # Add value labels
     for i, (bar, mn, mx) in enumerate(zip(bars, mins_, maxs_)):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + stds[i] + 0.1,
-                f"{means[i]:.1f}×", ha="center", va="bottom", fontweight="bold", fontsize=12)
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() / 2,
-                f"[{mn:.1f}×–{mx:.1f}×]", ha="center", va="center", fontsize=9, color="white")
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + stds[i] + 0.1,
+            f"{means[i]:.1f}×",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            fontsize=12,
+        )
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() / 2,
+            f"[{mn:.1f}×–{mx:.1f}×]",
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white",
+        )
 
     ax.axhline(y=1.0, color="red", linestyle="--", alpha=0.7, label="parity (1×)")
     ax.set_xticks(x)
@@ -99,12 +130,14 @@ def plot_speedup_bars(pairs, outdir):
     print("  → 01_speedup_bars.png")
 
 
-# ============================================================================
-# Plot 2: Speedup scaling with population size
-# ============================================================================
-
 def plot_scaling(pairs, outdir):
-    """Line plot: speedup vs population size, one line per optimizer."""
+    """Line plot: speedup vs population size, one line per optimizer.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     data = defaultdict(lambda: defaultdict(list))
     for p in pairs:
@@ -137,12 +170,14 @@ def plot_scaling(pairs, outdir):
     print("  → 02_scaling_population.png")
 
 
-# ============================================================================
-# Plot 3: Speedup scaling with dimensions
-# ============================================================================
-
 def plot_dimension_scaling(pairs, outdir):
-    """Line plot: speedup vs number of variables, one line per optimizer."""
+    """Line plot: speedup vs number of variables, one line per optimizer.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     data = defaultdict(lambda: defaultdict(list))
     for p in pairs:
@@ -175,16 +210,17 @@ def plot_dimension_scaling(pairs, outdir):
     print("  → 03_scaling_dimensions.png")
 
 
-# ============================================================================
-# Plot 4: Convergence quality scatter
-# ============================================================================
-
 def plot_quality_scatter(pairs, outdir):
     """Scatter plot: numpy best fitness vs torch best fitness.
 
     Points on the diagonal = identical quality. Below = torch is better.
     Near-zero pairs (both < 1e-4) are treated as converged and plotted at a
     baseline to avoid float32/float64 precision artifacts dominating the plot.
+
+        Args:
+            pairs: Paired benchmark records for the available backends.
+            outdir: Destination directory for the generated PNG figure.
+
     """
 
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -199,16 +235,21 @@ def plot_quality_scatter(pairs, outdir):
         fn = p["key"][1]
         np_f = max(p["numpy"]["best_fitness"], NEAR_ZERO)
         tc_f = max(p["torch_cpu"]["best_fitness"], NEAR_ZERO)
-        ax.scatter(np_f, tc_f,
-                   marker=markers.get(opt, "o"),
-                   color=colors.get(fn, "gray"),
-                   alpha=0.6, s=60, edgecolors="white", linewidth=0.5)
+        ax.scatter(
+            np_f,
+            tc_f,
+            marker=markers.get(opt, "o"),
+            color=colors.get(fn, "gray"),
+            alpha=0.6,
+            s=60,
+            edgecolors="white",
+            linewidth=0.5,
+        )
 
     # Diagonal reference
     all_fits = []
     for p in pairs:
-        all_fits.extend([max(p["numpy"]["best_fitness"], NEAR_ZERO),
-                         max(p["torch_cpu"]["best_fitness"], NEAR_ZERO)])
+        all_fits.extend([max(p["numpy"]["best_fitness"], NEAR_ZERO), max(p["torch_cpu"]["best_fitness"], NEAR_ZERO)])
     valid_fits = [f for f in all_fits if np.isfinite(f) and f > 0]
     if valid_fits:
         lo = min(valid_fits) * 0.5
@@ -221,10 +262,13 @@ def plot_quality_scatter(pairs, outdir):
 
     # Build legend
     from matplotlib.lines import Line2D
-    opt_handles = [Line2D([0], [0], marker=m, color="gray", linestyle="None", markersize=8, label=o)
-                   for o, m in markers.items()]
-    fn_handles = [Line2D([0], [0], marker="o", color=c, linestyle="None", markersize=8, label=f)
-                  for f, c in colors.items()]
+
+    opt_handles = [
+        Line2D([0], [0], marker=m, color="gray", linestyle="None", markersize=8, label=o) for o, m in markers.items()
+    ]
+    fn_handles = [
+        Line2D([0], [0], marker="o", color=c, linestyle="None", markersize=8, label=f) for f, c in colors.items()
+    ]
     ax.legend(handles=opt_handles + fn_handles, fontsize=9, loc="upper left", ncol=2)
 
     ax.set_xlabel("Opytimizer (NumPy) — Best Fitness", fontsize=13)
@@ -239,12 +283,14 @@ def plot_quality_scatter(pairs, outdir):
     print("  → 04_quality_scatter.png")
 
 
-# ============================================================================
-# Plot 5: Memory usage comparison
-# ============================================================================
-
 def plot_memory(pairs, outdir):
-    """Grouped bar chart: memory usage numpy vs torch, grouped by optimizer."""
+    """Grouped bar chart: memory usage numpy vs torch, grouped by optimizer.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     opt_mem = defaultdict(lambda: {"numpy": [], "torch": []})
     for p in pairs:
@@ -276,12 +322,14 @@ def plot_memory(pairs, outdir):
     print("  → 05_memory_usage.png")
 
 
-# ============================================================================
-# Plot 6: Timing heatmap (optimizer × population size)
-# ============================================================================
-
 def plot_timing_heatmap(pairs, outdir):
-    """Heatmap of speedup for each (optimizer, n_agents) combination."""
+    """Heatmap of speedup for each (optimizer, n_agents) combination.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     data = defaultdict(lambda: defaultdict(list))
     for p in pairs:
@@ -316,9 +364,16 @@ def plot_timing_heatmap(pairs, outdir):
     # Annotate cells
     for i in range(len(opts)):
         for j in range(len(all_ns)):
-            ax.text(j, i, f"{matrix[i, j]:.1f}×", ha="center", va="center",
-                    fontsize=11, fontweight="bold",
-                    color="white" if matrix[i, j] > matrix.max() * 0.6 else "black")
+            ax.text(
+                j,
+                i,
+                f"{matrix[i, j]:.1f}×",
+                ha="center",
+                va="center",
+                fontsize=11,
+                fontweight="bold",
+                color="white" if matrix[i, j] > matrix.max() * 0.6 else "black",
+            )
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("Speedup (×)", fontsize=12)
@@ -329,15 +384,16 @@ def plot_timing_heatmap(pairs, outdir):
     print("  → 06_speedup_heatmap.png")
 
 
-# ============================================================================
-# Plot 7: Wall-clock time comparison (absolute)
-# ============================================================================
-
 def plot_time_comparison(pairs, outdir):
-    """Per-function faceted bar chart: absolute time numpy vs torch."""
+    """Per-function faceted bar chart: absolute time numpy vs torch.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     fns = sorted(set(p["key"][1] for p in pairs))
-    opts = sorted(set(p["key"][0] for p in pairs))
 
     fig, axes = plt.subplots(1, len(fns), figsize=(4 * len(fns), 6), sharey=True)
     if len(fns) == 1:
@@ -376,16 +432,17 @@ def plot_time_comparison(pairs, outdir):
     print("  → 07_time_comparison.png")
 
 
-# ============================================================================
-# Plot 8: Summary dashboard
-# ============================================================================
-
 def plot_dashboard(pairs, outdir):
-    """2x2 dashboard combining key metrics."""
+    """2x2 dashboard combining key metrics.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
 
-    # ── Top-left: Average speedup bars ──
     opt_speedups = defaultdict(list)
     for p in pairs:
         np_t = p["numpy"]["time_seconds"]
@@ -403,17 +460,13 @@ def plot_dashboard(pairs, outdir):
     ax1.set_title("Avg Speedup per Optimizer", fontweight="bold")
     ax1.grid(axis="x", alpha=0.3)
 
-    # ── Top-right: Quality ratio (tolerance-aware) ──
     # When both fitnesses are near-zero (< 1e-4), they are considered equal
-    # regardless of float32/float64 precision differences.
+    # regardless of float32/float64 precision differences
     opt_quality = defaultdict(list)
     for p in pairs:
         np_f = p["numpy"]["best_fitness"]
         tc_f = p["torch_cpu"]["best_fitness"]
         if np.isfinite(np_f) and np.isfinite(tc_f):
-            denom = max(abs(np_f), abs(tc_f), 1e-4)
-            ratio = tc_f / denom if denom > 0 else 1.0
-            np_ratio = np_f / denom if denom > 0 else 1.0
             # Compute relative quality: values near 1.0 = parity
             if abs(np_f) < 1e-4 and abs(tc_f) < 1e-4:
                 opt_quality[p["key"][0]].append(1.0)
@@ -431,7 +484,6 @@ def plot_dashboard(pairs, outdir):
     ax2.set_title("Quality Ratio (≤1.0 = torch better)", fontweight="bold")
     ax2.grid(axis="x", alpha=0.3)
 
-    # ── Bottom-left: Scaling ──
     scaling_data = defaultdict(lambda: defaultdict(list))
     for p in pairs:
         opt = p["key"][0]
@@ -454,7 +506,6 @@ def plot_dashboard(pairs, outdir):
     if len(scaling_data) > 0:
         ax3.set_xscale("log")
 
-    # ── Bottom-right: Memory ──
     opt_mem = defaultdict(lambda: {"numpy": [], "torch": []})
     for p in pairs:
         opt = p["key"][0]
@@ -464,10 +515,8 @@ def plot_dashboard(pairs, outdir):
     opts_m = sorted(opt_mem.keys())
     x = np.arange(len(opts_m))
     w = 0.35
-    ax4.bar(x - w / 2, [np.mean(opt_mem[o]["numpy"]) for o in opts_m], w,
-            label="NumPy", color="#FF7043", alpha=0.85)
-    ax4.bar(x + w / 2, [np.mean(opt_mem[o]["torch"]) for o in opts_m], w,
-            label="PyTorch", color="#42A5F5", alpha=0.85)
+    ax4.bar(x - w / 2, [np.mean(opt_mem[o]["numpy"]) for o in opts_m], w, label="NumPy", color="#FF7043", alpha=0.85)
+    ax4.bar(x + w / 2, [np.mean(opt_mem[o]["torch"]) for o in opts_m], w, label="PyTorch", color="#42A5F5", alpha=0.85)
     ax4.set_xticks(x)
     ax4.set_xticklabels(opts_m, fontsize=10)
     ax4.set_ylabel("Peak Memory (MB)")
@@ -482,12 +531,14 @@ def plot_dashboard(pairs, outdir):
     print("  → 08_dashboard.png")
 
 
-# ============================================================================
-# Plot 9: GPU vs CPU Speedup Comparison (bar chart)
-# ============================================================================
-
 def plot_gpu_vs_cpu_bars(pairs, outdir):
-    """Grouped bar chart: avg CPU speedup vs GPU speedup per optimizer."""
+    """Grouped bar chart: avg CPU speedup vs GPU speedup per optimizer.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     has_gpu = any(p["torch_gpu"] is not None for p in pairs)
     if not has_gpu:
@@ -514,16 +565,24 @@ def plot_gpu_vs_cpu_bars(pairs, outdir):
     x = np.arange(len(opts))
     w = 0.2
 
-    ax.bar(x - 1.5*w, cpu_means, w, label="CPU Avg", color="#42A5F5", edgecolor="#1565C0", alpha=0.85)
-    ax.bar(x - 0.5*w, cpu_peaks, w, label="CPU Peak", color="#1565C0", edgecolor="#0D47A1", alpha=0.85)
-    ax.bar(x + 0.5*w, gpu_means, w, label="GPU Avg", color="#66BB6A", edgecolor="#2E7D32", alpha=0.85)
-    ax.bar(x + 1.5*w, gpu_peaks, w, label="GPU Peak", color="#2E7D32", edgecolor="#1B5E20", alpha=0.85)
+    ax.bar(x - 1.5 * w, cpu_means, w, label="CPU Avg", color="#42A5F5", edgecolor="#1565C0", alpha=0.85)
+    ax.bar(x - 0.5 * w, cpu_peaks, w, label="CPU Peak", color="#1565C0", edgecolor="#0D47A1", alpha=0.85)
+    ax.bar(x + 0.5 * w, gpu_means, w, label="GPU Avg", color="#66BB6A", edgecolor="#2E7D32", alpha=0.85)
+    ax.bar(x + 1.5 * w, gpu_peaks, w, label="GPU Peak", color="#2E7D32", edgecolor="#1B5E20", alpha=0.85)
 
     for i in range(len(opts)):
-        ax.text(x[i]-1.5*w, cpu_means[i]+5, f"{cpu_means[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90)
-        ax.text(x[i]-0.5*w, cpu_peaks[i]+5, f"{cpu_peaks[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90)
-        ax.text(x[i]+0.5*w, gpu_means[i]+5, f"{gpu_means[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90)
-        ax.text(x[i]+1.5*w, gpu_peaks[i]+5, f"{gpu_peaks[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90)
+        ax.text(
+            x[i] - 1.5 * w, cpu_means[i] + 5, f"{cpu_means[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90
+        )
+        ax.text(
+            x[i] - 0.5 * w, cpu_peaks[i] + 5, f"{cpu_peaks[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90
+        )
+        ax.text(
+            x[i] + 0.5 * w, gpu_means[i] + 5, f"{gpu_means[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90
+        )
+        ax.text(
+            x[i] + 1.5 * w, gpu_peaks[i] + 5, f"{gpu_peaks[i]:.0f}×", ha="center", va="bottom", fontsize=8, rotation=90
+        )
 
     ax.set_xticks(x)
     ax.set_xticklabels(opts, fontsize=13)
@@ -539,12 +598,14 @@ def plot_gpu_vs_cpu_bars(pairs, outdir):
     print("  → 09_gpu_vs_cpu_bars.png")
 
 
-# ============================================================================
-# Plot 10: GPU Scaling — speedup vs population size
-# ============================================================================
-
 def plot_gpu_scaling(pairs, outdir):
-    """Line plot: GPU speedup vs population size, one line per optimizer."""
+    """Line plot: GPU speedup vs population size, one line per optimizer.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     has_gpu = any(p["torch_gpu"] is not None for p in pairs)
     if not has_gpu:
@@ -598,12 +659,14 @@ def plot_gpu_scaling(pairs, outdir):
     print("  → 10_gpu_scaling.png")
 
 
-# ============================================================================
-# Plot 11: 3-Backend Heatmap (optimizer × pop → speedup, CPU & GPU side by side)
-# ============================================================================
-
 def plot_3backend_heatmap(pairs, outdir):
-    """Side-by-side heatmaps for CPU and GPU speedup."""
+    """Side-by-side heatmaps for CPU and GPU speedup.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     has_gpu = any(p["torch_gpu"] is not None for p in pairs)
     if not has_gpu:
@@ -645,9 +708,16 @@ def plot_3backend_heatmap(pairs, outdir):
     ax1.set_title("CPU Speedup", fontsize=14, fontweight="bold")
     for i in range(len(opts)):
         for j in range(len(all_ns)):
-            ax1.text(j, i, f"{cpu_matrix[i,j]:.0f}×", ha="center", va="center",
-                     fontsize=10, fontweight="bold",
-                     color="white" if cpu_matrix[i,j] > vmax*0.5 else "black")
+            ax1.text(
+                j,
+                i,
+                f"{cpu_matrix[i, j]:.0f}×",
+                ha="center",
+                va="center",
+                fontsize=10,
+                fontweight="bold",
+                color="white" if cpu_matrix[i, j] > vmax * 0.5 else "black",
+            )
 
     im2 = ax2.imshow(gpu_matrix, cmap="YlOrRd", aspect="auto", vmin=0, vmax=vmax)
     ax2.set_xticks(range(len(all_ns)))
@@ -658,9 +728,16 @@ def plot_3backend_heatmap(pairs, outdir):
     ax2.set_title("GPU Speedup (RTX 4070)", fontsize=14, fontweight="bold")
     for i in range(len(opts)):
         for j in range(len(all_ns)):
-            ax2.text(j, i, f"{gpu_matrix[i,j]:.0f}×", ha="center", va="center",
-                     fontsize=10, fontweight="bold",
-                     color="white" if gpu_matrix[i,j] > vmax*0.5 else "black")
+            ax2.text(
+                j,
+                i,
+                f"{gpu_matrix[i, j]:.0f}×",
+                ha="center",
+                va="center",
+                fontsize=10,
+                fontweight="bold",
+                color="white" if gpu_matrix[i, j] > vmax * 0.5 else "black",
+            )
 
     fig.colorbar(im1, ax=ax1, shrink=0.8, label="Speedup (×)")
     fig.colorbar(im2, ax=ax2, shrink=0.8, label="Speedup (×)")
@@ -672,12 +749,14 @@ def plot_3backend_heatmap(pairs, outdir):
     print("  → 11_3backend_heatmap.png")
 
 
-# ============================================================================
-# Plot 12: GPU Time Invariance — showing GPU time stays flat vs population
-# ============================================================================
-
 def plot_gpu_time_invariance(pairs, outdir):
-    """Show that GPU execution time stays nearly constant regardless of problem size."""
+    """Plot recorded execution times across population sizes.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     has_gpu = any(p["torch_gpu"] is not None for p in pairs)
     if not has_gpu:
@@ -701,7 +780,7 @@ def plot_gpu_time_invariance(pairs, outdir):
     if not focus_opts:
         focus_opts = list(gpu_times.keys())[:4]
 
-    fig, axes = plt.subplots(1, len(focus_opts), figsize=(5*len(focus_opts), 6), sharey=False)
+    fig, axes = plt.subplots(1, len(focus_opts), figsize=(5 * len(focus_opts), 6), sharey=False)
     if len(focus_opts) == 1:
         axes = [axes]
 
@@ -730,12 +809,14 @@ def plot_gpu_time_invariance(pairs, outdir):
     print("  → 12_gpu_time_invariance.png")
 
 
-# ============================================================================
-# Plot 13: Full dashboard with GPU data
-# ============================================================================
-
 def plot_gpu_dashboard(pairs, outdir):
-    """2x2 dashboard with GPU-focused metrics."""
+    """2x2 dashboard with GPU-focused metrics.
+
+    Args:
+        pairs: Paired benchmark records for the available backends.
+        outdir: Destination directory for the generated PNG figure.
+
+    """
 
     has_gpu = any(p["torch_gpu"] is not None for p in pairs)
     if not has_gpu:
@@ -744,7 +825,6 @@ def plot_gpu_dashboard(pairs, outdir):
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
 
-    # ── Top-left: Peak speedup bars (CPU vs GPU) ──
     opt_cpu_peak = defaultdict(float)
     opt_gpu_peak = defaultdict(float)
     for p in pairs:
@@ -761,12 +841,16 @@ def plot_gpu_dashboard(pairs, outdir):
     opts = sorted(opt_cpu_peak.keys())
     x = np.arange(len(opts))
     w = 0.35
-    ax1.bar(x - w/2, [opt_cpu_peak[o] for o in opts], w, label="CPU Peak", color="#42A5F5", edgecolor="#1565C0")
-    ax1.bar(x + w/2, [opt_gpu_peak.get(o, 0) for o in opts], w, label="GPU Peak", color="#66BB6A", edgecolor="#2E7D32")
+    ax1.bar(x - w / 2, [opt_cpu_peak[o] for o in opts], w, label="CPU Peak", color="#42A5F5", edgecolor="#1565C0")
+    ax1.bar(
+        x + w / 2, [opt_gpu_peak.get(o, 0) for o in opts], w, label="GPU Peak", color="#66BB6A", edgecolor="#2E7D32"
+    )
     for i, o in enumerate(opts):
-        ax1.text(x[i]-w/2, opt_cpu_peak[o]+10, f"{opt_cpu_peak[o]:.0f}×", ha="center", va="bottom", fontsize=9)
+        ax1.text(x[i] - w / 2, opt_cpu_peak[o] + 10, f"{opt_cpu_peak[o]:.0f}×", ha="center", va="bottom", fontsize=9)
         if o in opt_gpu_peak:
-            ax1.text(x[i]+w/2, opt_gpu_peak[o]+10, f"{opt_gpu_peak[o]:.0f}×", ha="center", va="bottom", fontsize=9)
+            ax1.text(
+                x[i] + w / 2, opt_gpu_peak[o] + 10, f"{opt_gpu_peak[o]:.0f}×", ha="center", va="bottom", fontsize=9
+            )
     ax1.set_xticks(x)
     ax1.set_xticklabels(opts, fontsize=12)
     ax1.set_ylabel("Peak Speedup (×)")
@@ -774,7 +858,6 @@ def plot_gpu_dashboard(pairs, outdir):
     ax1.legend(fontsize=10)
     ax1.grid(axis="y", alpha=0.3)
 
-    # ── Top-right: GPU speedup vs dimensions ──
     dim_data = defaultdict(lambda: defaultdict(list))
     for p in pairs:
         if p["torch_gpu"] is not None:
@@ -797,7 +880,6 @@ def plot_gpu_dashboard(pairs, outdir):
     ax2.grid(alpha=0.3)
     ax2.set_xscale("log")
 
-    # ── Bottom-left: GPU scaling with population ──
     pop_gpu = defaultdict(lambda: defaultdict(list))
     for p in pairs:
         if p["torch_gpu"] is not None:
@@ -819,9 +901,7 @@ def plot_gpu_dashboard(pairs, outdir):
     ax3.grid(alpha=0.3)
     ax3.set_xscale("log")
 
-    # ── Bottom-right: Absolute time comparison at n=1000, d=100 ──
-    big_configs = [p for p in pairs if p["key"][2] >= 500 and p["key"][3] >= 50
-                   and p["torch_gpu"] is not None]
+    big_configs = [p for p in pairs if p["key"][2] >= 500 and p["key"][3] >= 50 and p["torch_gpu"] is not None]
     if big_configs:
         opt_np = defaultdict(list)
         opt_cpu = defaultdict(list)
@@ -853,14 +933,12 @@ def plot_gpu_dashboard(pairs, outdir):
     print("  → 13_gpu_dashboard.png")
 
 
-# ============================================================================
-# Main
-# ============================================================================
-
 def main():
+    """Generate plots from a benchmark result file."""
+
     parser = argparse.ArgumentParser(description="Generate benchmark plots")
-    parser.add_argument("--input", type=str, default="benchmarks/results.json")
-    parser.add_argument("--outdir", type=str, default="benchmarks/plots")
+    parser.add_argument("--input", type=str, default=str(Path("report") / "benchmarks" / "results.json"))
+    parser.add_argument("--outdir", type=str, default=str(Path("report") / "benchmarks" / "plots"))
     args = parser.parse_args()
 
     results = load_results(args.input)

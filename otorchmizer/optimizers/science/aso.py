@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Atom Search Optimization.
 
 References:
@@ -9,7 +12,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -24,7 +27,14 @@ logger = logging.get_logger(__name__)
 class ASO(Optimizer):
     """Atom Search Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the ASO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> ASO.")
         self.alpha = 50.0
         self.beta = 0.2
@@ -33,29 +43,77 @@ class ASO(Optimizer):
 
     @property
     def alpha(self) -> float:
+        """Return the alpha coefficient.
+
+        Returns:
+            float: Current alpha coefficient.
+
+        """
+
         return self._alpha
 
     @alpha.setter
     def alpha(self, alpha: float) -> None:
+        """Set the alpha coefficient.
+
+        Args:
+            alpha: New value for the alpha coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` should be a float or integer")
+            raise e.TypeError("`alpha` must be a float or integer.")
         self._alpha = alpha
 
     @property
     def beta(self) -> float:
+        """Return the beta coefficient.
+
+        Returns:
+            float: Current beta coefficient.
+
+        """
+
         return self._beta
 
     @beta.setter
     def beta(self, beta: float) -> None:
+        """Set the beta coefficient.
+
+        Args:
+            beta: New value for the beta coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` should be a float or integer")
+            raise e.TypeError("`beta` must be a float or integer.")
         self._beta = beta
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.velocity = torch.zeros(shape, device=population.device)
+        self.velocity = population.positions.new_zeros(shape)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one ASO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents

@@ -8,13 +8,21 @@
 
 Did you ever reach a bottleneck in your computational experiments? Are you tired of waiting hours for meta-heuristic optimization runs? If yes, Otorchmizer is the real deal! This package provides an easy-to-go implementation of **91 meta-heuristic optimization algorithms** — all powered by PyTorch tensors for GPU-accelerated performance. From populations to search spaces, from internal functions to external communication, we will foster all research related to optimizing stuff.
 
-Otorchmizer is the modernized successor to [Opytimizer](https://github.com/gugarosa/opytimizer), delivering **up to 2,311× speedup** by replacing NumPy with PyTorch.
+Otorchmizer builds on [Opytimizer](https://github.com/gugarosa/opytimizer) with tensor-based
+population storage and GPU-capable operations. Performance depends on the algorithm,
+objective, population shape, dtype, and hardware; the archived benchmarks are not a
+guarantee for every optimizer or workload.
+
+**Algorithm fidelity is not uniform.** Several exports have identity, equation,
+or parameter differences from their Opytimizer migration targets. Read
+[Algorithm migration limits](docs/algorithm_limits.rst) before using class names
+alone as evidence in a scientific comparison.
 
 Use Otorchmizer if you need a library or wish to:
 * Create your optimization algorithm with automatic GPU support;
 * Design or use pre-loaded optimization tasks at scale;
-* Run the same code on CPU, single-GPU, or multi-GPU seamlessly;
-* Leverage `torch.compile` and CUDA Graphs for maximum throughput;
+* Run compatible tensor workloads on CPU or CUDA and split populations across devices;
+* Use `torch.compile` or CUDA Graphs when the update operations support them;
 * Mix-and-match different strategies to solve your problem;
 * Because it is fun to optimize things — even faster.
 
@@ -117,7 +125,10 @@ Just because we are computing stuff does not mean that we do not need math. Math
 
 ### Optimizers
 
-This is why we are called Otorchmizer. This is the heart of heuristics, where you can find **91 meta-heuristic optimization techniques** across 7 families — swarm intelligence, evolutionary algorithms, science-inspired methods, and more. Every algorithm uses batched tensor operations, meaning the same code runs on CPU and GPU without modification.
+The optimizer families expose **91 meta-heuristic classes**. Implementations use tensor
+populations, but some updates retain per-agent loops or backend-specific limitations.
+Objective compatibility and operator support must be considered before selecting a
+device or reduced-precision dtype.
 
 ### Spaces
 
@@ -137,9 +148,32 @@ Everyone needs images and plots to help visualize what is happening, correct? Th
 
 We believe that everything has to be easy. Not tricky or daunting, Otorchmizer will be the one-to-go package that you will need, from the first installation to the daily tasks implementing needs. If you may just run the following under your most preferred Python environment (raw, conda, virtualenv, whatever):
 
+For a project managed by uv:
+
 ```bash
-pip install -e .
+uv add otorchmizer
 ```
+
+For an existing Python environment:
+
+```bash
+pip install otorchmizer
+```
+
+For development from this checkout:
+
+```bash
+uv venv --python 3.12
+uv pip install --torch-backend cpu -e ".[dev,docs]"
+uv run --no-sync pytest
+uv run --no-sync pre-commit run --all-files
+uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
+uv build
+```
+
+The CPU backend above is an environment choice for local checks and CI, not a
+restriction in package metadata. GPU environments should select a PyTorch build
+matching their hardware. See [CONVENTIONS.md](CONVENTIONS.md) for contributor rules.
 
 ---
 
@@ -180,16 +214,17 @@ from otorchmizer import Otorchmizer
 from otorchmizer.core import Function, Space
 from otorchmizer.optimizers.swarm import PSO
 
+
 def sphere(x):
-    return (x ** 2).sum(dim=(-1, -2))
+    return (x**2).sum(dim=(-1, -2))
+
 
 n_agents = 20
 n_variables = 2
 lower_bound = [-10, -10]
 upper_bound = [10, 10]
 
-space = Space(n_agents=n_agents, n_variables=n_variables,
-              lower_bound=lower_bound, upper_bound=upper_bound)
+space = Space(n_agents=n_agents, n_variables=n_variables, lower_bound=lower_bound, upper_bound=upper_bound)
 space.build()
 
 optimizer = PSO()
@@ -203,17 +238,15 @@ opt.start(n_iterations=1000)
 
 ## GPU Usage
 
-Running on GPU requires only a single parameter change — all algorithms, spaces, and functions work identically:
+Select a CUDA-capable PyTorch environment and a compatible objective before using a GPU:
 
 ```python
 # Automatically uses GPU if available, otherwise falls back to CPU
-space = Space(n_agents=1000, n_variables=100,
-              lower_bound=-10.0, upper_bound=10.0,
-              device="auto")
+space = Space(n_agents=1000, n_variables=100, lower_bound=-10.0, upper_bound=10.0, device="auto")
 space.build()
 ```
 
-For even more performance, enable `torch.compile` JIT acceleration:
+Compilation is optional and does not guarantee a speedup:
 
 ```python
 optimizer = PSO()
@@ -221,29 +254,37 @@ optimizer.compile(space.population)
 optimizer.torch_compile(mode="reduce-overhead")
 ```
 
+The engine dispatches through `optimizer(ctx)` to use the compiled callable.
+Calling `optimizer.update(ctx)` directly intentionally uses the eager implementation.
+
 ---
 
 ## Why Otorchmizer over Opytimizer?
 
-Otorchmizer is a drop-in modernization of Opytimizer. The same algorithms, the same API style, but with a fundamentally different computational engine:
+Otorchmizer retains the overall workflow, but is not a drop-in replacement:
+population storage, objective batching, update dispatch, dtype, and some algorithm
+variants differ. Validate migration results against the requirements of the workload.
 
 | | Opytimizer | Otorchmizer |
 |---|---|---|
 | **Backend** | NumPy | PyTorch |
 | **Agent storage** | `List[Agent]` (Python objects) | `Population` tensor `(n, v, d)` |
-| **Update loop** | `for agent in agents:` (Python) | Batched tensor ops (vectorized) |
+| **Update loop** | Primarily per-agent Python operations | Tensor operations, with per-agent loops where still required |
 | **GPU support** | ❌ None | ✅ CUDA, multi-GPU, CUDA Graphs |
 | **Mixed precision** | ❌ float64 only | ✅ float16, bfloat16, float32, float64 |
 | **JIT compilation** | ❌ None | ✅ `torch.compile` |
-| **Algorithms** | 92 | 91 (3 specialized deferred) |
-| **CPU speedup** | 1× (baseline) | **50–1,055×** |
-| **GPU speedup** | — | **up to 2,311×** |
+| **Algorithms** | Depends on the referenced release | 91 exported optimizer classes |
+| **Performance** | Workload-dependent reference | Measure equivalent behavior on the target environment |
 
 For a detailed migration guide, see [`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_GUIDE.md).
 
 ---
 
 ## Algorithms (91 total)
+
+The table lists exported classes, not a certification that all 91 implementations
+faithfully reproduce their migration targets. The known exceptions and unresolved
+compatibility decisions are documented in [Algorithm migration limits](docs/algorithm_limits.rst).
 
 | Family | Count | Algorithms |
 |--------|-------|-----------|
@@ -259,7 +300,9 @@ For a detailed migration guide, see [`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_G
 
 ## Benchmarks
 
-Results from 432 paired configurations across 3 backends (NumPy, PyTorch CPU, PyTorch GPU on an NVIDIA RTX 4070):
+The February 2026 [migration report](report/REPORT.md) records 432 paired configurations
+across NumPy, PyTorch CPU, and an NVIDIA RTX 4070. The figures below summarize that
+archive, not a new measurement of the current revision or every optimizer family.
 
 | Metric | Value |
 |--------|-------|
@@ -267,11 +310,16 @@ Results from 432 paired configurations across 3 backends (NumPy, PyTorch CPU, Py
 | Peak CPU speedup | **1,055×** (GA, 1000 agents, 100 dims) |
 | Average GPU speedup | **169×** |
 | Peak GPU speedup | **2,311×** (HC, 1000 agents, 100 dims) |
-| Convergence quality | Parity with original |
+| Recorded convergence summary | Reported parity on the archived benchmark cases |
 
-GPU execution time stays **nearly constant** (~0.03–0.08s) regardless of problem size, while NumPy grows linearly.
+Do not extrapolate those timings to larger problems, different algorithms, compilation,
+or reduced precision. The checked-in benchmark harness compares five optimizer classes,
+and stochastic or parallelized variants need not follow identical trajectories.
 
 ```bash
+# Install the reference implementation explicitly
+uv pip install -e ".[benchmarks]"
+
 # Quick CPU-only benchmarks
 python report/benchmarks/run_benchmarks.py --quick
 
@@ -291,8 +339,20 @@ See the full [Migration Report](report/REPORT.md) for detailed analysis, tables,
 
 ```bash
 python -m pytest tests/ -v
-# 197 passed
 ```
+
+The CPU suite is not a substitute for CUDA or multi-GPU execution on suitable hardware.
+
+## Releasing
+
+Review and merge changes before creating a GitHub release tagged `v<version>`.
+Keep `pyproject.toml` and `otorchmizer.__version__` aligned. The publish workflow
+reruns the supported interpreter matrix, style checks, documentation build, and
+installed-wheel tests, then checks the tag against the package version.
+
+PyPI publishing requires a configured Trusted Publisher for this repository and
+`build-publish-to-pypi.yml`, or the repository's `PYPI_API_TOKEN` secret. Authentication
+must be configured by a package owner before publication; it is not created by the PR.
 
 ---
 
@@ -302,6 +362,7 @@ python -m pytest tests/ -v
 |----------|-------------|
 | [Migration Guide](docs/MIGRATION_GUIDE.md) | For existing Opytimizer users — API mapping, code examples, FAQ |
 | [Architecture Guide](ARCHITECTURE.md) | Full design document covering Population, UpdateContext, DeviceManager |
+| [Algorithm migration limits](docs/algorithm_limits.rst) | Known identity, equation, parameter, and device limitations |
 | [Migration Report](report/REPORT.md) | Detailed performance analysis with 13 benchmark plots |
 | [API Reference](docs/) | Sphinx auto-generated docs (`cd docs && make html`) |
 | [Examples](examples/) | Commented examples for core, optimizers, applications, GPU, and math |

@@ -1,4 +1,7 @@
-from otorchmizer.optimizers.swarm import ABC, BA, CS, SSA, SCA
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
+from otorchmizer.optimizers.swarm import ABC, BA, CS, SCA, SSA
 
 # Artificial Bee Colony
 abc = ABC(params={"n_trials": 10})

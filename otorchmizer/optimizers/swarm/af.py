@@ -1,13 +1,17 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Artificial Flora.
 
 References:
     L. Cheng et al. Artificial flora (AF) optimization algorithm.
     Applied Sciences (2018).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -21,10 +25,19 @@ logger = logging.get_logger(__name__)
 class AF(Optimizer):
     """Artificial Flora optimizer.
 
-    Simulates the spreading and competition of plant species.
+    Notes:
+        Simulates the spreading and competition of plant species.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> AF.")
 
         self.m = 5
@@ -37,50 +50,68 @@ class AF(Optimizer):
 
     @property
     def m(self) -> int:
+        """Return the number of seedlings."""
+
         return self._m
 
     @m.setter
     def m(self, m: int) -> None:
         if not isinstance(m, int):
-            raise e.TypeError("`m` should be an integer")
+            raise e.TypeError("`m` must be an integer.")
         if m <= 0:
-            raise e.ValueError("`m` should be > 0")
+            raise e.ValueError("`m` must be positive.")
         self._m = m
 
     @property
     def Q(self) -> float:
+        """Return the selection coefficient."""
+
         return self._Q
 
     @Q.setter
     def Q(self, Q: float) -> None:
         if not isinstance(Q, (float, int)):
-            raise e.TypeError("`Q` should be a float or integer")
+            raise e.TypeError("`Q` must be a float or integer.")
         self._Q = Q
 
     @property
     def g(self) -> float:
+        """Return the branch growth coefficient."""
+
         return self._g
 
     @g.setter
     def g(self, g: float) -> None:
         if not isinstance(g, (float, int)):
-            raise e.TypeError("`g` should be a float or integer")
+            raise e.TypeError("`g` must be a float or integer.")
         self._g = g
 
     def compile(self, population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.branch = torch.zeros(shape, device=population.device)
+        self.branch = torch.zeros(shape, device=population.device, dtype=population.dtype)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
-        device = pop.device
         n = pop.n_agents
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
         for i in range(n):
-            # Generate m seedlings per plant
             best_seed_pos = None
             best_seed_fit = pop.fitness[i]
 

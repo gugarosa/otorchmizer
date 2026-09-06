@@ -1,13 +1,16 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Otorchmizer — main optimization entry point.
 
 Orchestrates the full optimization loop:
-evaluate → update → clip → record history → repeat
+initial evaluation → update → clip → evaluate → record history → repeat
+
 """
 
 from __future__ import annotations
 
 import time
-from typing import List, Optional
 
 import dill
 from tqdm import tqdm
@@ -26,9 +29,10 @@ logger = logging.get_logger(__name__)
 class Otorchmizer:
     """Holds all information needed to perform an optimization task.
 
-    Wires together a Space (population), Optimizer (algorithm),
-    and Function (objective), then runs the optimization loop with
-    callbacks, history tracking, and checkpoint support.
+    Notes:
+        Connects a search space, optimizer, and objective function.
+        Runs the optimization loop with callbacks, history tracking, and checkpoint support.
+
     """
 
     def __init__(
@@ -38,23 +42,27 @@ class Otorchmizer:
         function: Function,
         save_agents: bool = False,
     ) -> None:
-        """Initialization method.
+        """Connect built optimization components and allocate optimizer state.
 
         Args:
             space: A built Space instance.
             optimizer: A built Optimizer instance.
             function: A built Function instance.
             save_agents: Whether to save all agent positions per iteration.
+
+        Raises:
+            BuildError: The space, optimizer, or function has not been built.
+
         """
 
         logger.info("Creating class: Otorchmizer.")
 
         if not space.built:
-            raise e.BuildError("`space` should be built before using Otorchmizer")
+            raise e.BuildError("`space` should be built before using Otorchmizer.")
         if not optimizer.built:
-            raise e.BuildError("`optimizer` should be built before using Otorchmizer")
+            raise e.BuildError("`optimizer` should be built before using Otorchmizer.")
         if not function.built:
-            raise e.BuildError("`function` should be built before using Otorchmizer")
+            raise e.BuildError("`function` should be built before using Otorchmizer.")
 
         self.space = space
         self.optimizer = optimizer
@@ -70,13 +78,13 @@ class Otorchmizer:
 
         logger.debug(
             "Space: %s | Optimizer: %s | Function: %s.",
-            self.space, self.optimizer, self.function,
+            self.space,
+            self.optimizer,
+            self.function,
         )
         logger.info("Class created.")
 
     def _make_context(self) -> UpdateContext:
-        """Creates an UpdateContext for the current iteration."""
-
         return UpdateContext(
             space=self.space,
             function=self.function,
@@ -90,6 +98,7 @@ class Otorchmizer:
 
         Args:
             callbacks: Callback vessel for lifecycle hooks.
+
         """
 
         callbacks.on_evaluate_before(self.space.population, self.function)
@@ -101,12 +110,13 @@ class Otorchmizer:
 
         Args:
             callbacks: Callback vessel for lifecycle hooks.
+
         """
 
         ctx = self._make_context()
 
         callbacks.on_update_before(ctx)
-        self.optimizer.update(ctx)
+        self.optimizer(ctx)
         callbacks.on_update_after(ctx)
 
         self.space.clip()
@@ -114,13 +124,14 @@ class Otorchmizer:
     def start(
         self,
         n_iterations: int = 1,
-        callbacks: Optional[List[Callback]] = None,
+        callbacks: list[Callback] | None = None,
     ) -> None:
         """Starts the optimization task.
 
         Args:
             n_iterations: Maximum number of iterations.
             callbacks: List of Callback instances.
+
         """
 
         logger.info("Starting optimization task.")
@@ -132,7 +143,6 @@ class Otorchmizer:
 
         vessel.on_task_begin(self)
 
-        # Initial evaluation
         self.evaluate(vessel)
 
         with tqdm(total=n_iterations, ascii=True) as bar:
@@ -177,6 +187,7 @@ class Otorchmizer:
 
         Args:
             file_path: Output file path.
+
         """
 
         with open(file_path, "wb") as f:
@@ -191,6 +202,10 @@ class Otorchmizer:
 
         Returns:
             Loaded Otorchmizer instance.
+
+        Notes:
+            Load only trusted checkpoints because dill deserialization can execute code.
+
         """
 
         with open(file_path, "rb") as f:

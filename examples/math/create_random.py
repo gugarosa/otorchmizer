@@ -1,6 +1,8 @@
-import torch
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
 
-from otorchmizer.math import random, distribution
+
+from otorchmizer.math import distribution, random
 
 # Generate uniform random numbers
 u = random.generate_uniform_random_number(low=0, high=1, size=(5,))

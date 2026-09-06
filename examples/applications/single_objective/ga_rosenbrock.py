@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer import Otorchmizer
@@ -10,6 +13,16 @@ torch.manual_seed(0)
 
 # Rosenbrock function — a classic non-convex optimization benchmark
 def rosenbrock(x):
+    """Compute the Rosenbrock objective for one candidate.
+
+    Args:
+        x: Candidate tensor with one value per variable.
+
+    Returns:
+        Scalar Rosenbrock fitness.
+
+    """
+
     x_flat = x.squeeze(-1)
     return ((100 * (x_flat[1:] - x_flat[:-1] ** 2) ** 2) + (1 - x_flat[:-1]) ** 2).sum()
 
@@ -23,8 +36,9 @@ lower_bound = [-5] * n_variables
 upper_bound = [10] * n_variables
 
 # Creates the space, optimizer and function
-space = Space(n_agents=n_agents, n_variables=n_variables,
-              lower_bound=lower_bound, upper_bound=upper_bound, device="cpu")
+space = Space(
+    n_agents=n_agents, n_variables=n_variables, lower_bound=lower_bound, upper_bound=upper_bound, device="cpu"
+)
 space.build()
 optimizer = GA(params={"p_selection": 0.75, "p_mutation": 0.25, "p_crossover": 0.5})
 function = Function(rosenbrock)

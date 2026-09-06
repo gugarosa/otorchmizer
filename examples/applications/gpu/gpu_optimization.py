@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer import Otorchmizer
@@ -9,7 +12,17 @@ torch.manual_seed(0)
 
 
 def sphere(x):
-    return (x ** 2).sum(dim=(-1, -2))
+    """Compute sphere fitness over the variable and dimension axes.
+
+    Args:
+        x: Candidate or population position tensor.
+
+    Returns:
+        Squared norms over the final two axes.
+
+    """
+
+    return (x**2).sum(dim=(-1, -2))
 
 
 # Number of agents and decision variables
@@ -22,8 +35,9 @@ upper_bound = [10] * n_variables
 
 # Creates the space on GPU (falls back to CPU if CUDA is unavailable)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-space = Space(n_agents=n_agents, n_variables=n_variables,
-              lower_bound=lower_bound, upper_bound=upper_bound, device=device)
+space = Space(
+    n_agents=n_agents, n_variables=n_variables, lower_bound=lower_bound, upper_bound=upper_bound, device=device
+)
 space.build()
 optimizer = PSO()
 function = Function(sphere)
