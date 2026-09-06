@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-import otorchmizer.utils.exception as e
-
 PlotData = torch.Tensor | np.ndarray | Sequence[float]
 
 
@@ -46,7 +44,7 @@ def plot(
 
     Raises:
         TypeError: If `labels` is not a list.
-        SizeError: If `labels` does not contain one entry per plotted variable.
+        ValueError: If `labels` does not contain one entry per plotted variable.
 
     Notes:
         This function displays the pyplot window and returns None.
@@ -64,9 +62,9 @@ def plot(
 
     if labels:
         if not isinstance(labels, list):
-            raise e.TypeError("`labels` should be a list.")
+            raise TypeError("`labels` should be a list.")
         if len(labels) != len(args):
-            raise e.SizeError("`args` and `labels` should have the same size.")
+            raise ValueError("`args` and `labels` should have the same size.")
     else:
         labels = [f"variable_{i}" for i in range(len(args))]
 

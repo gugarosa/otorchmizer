@@ -11,16 +11,13 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GCO(Optimizer):
@@ -34,14 +31,10 @@ class GCO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GCO.")
-
         self.CR = 0.7
         self.F = 1.25
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def CR(self) -> float:
@@ -51,11 +44,11 @@ class GCO(Optimizer):
 
     @CR.setter
     def CR(self, CR: float) -> None:
-        if not isinstance(CR, (float, int)):
-            raise e.TypeError("`CR` must be a float or integer.")
+        if not isinstance(CR, Real):
+            raise TypeError("`CR` must be a float or integer.")
         if not 0 <= CR <= 1:
-            raise e.ValueError("`CR` must be between 0 and 1.")
-        self._CR = CR
+            raise ValueError("`CR` must be between 0 and 1.")
+        self._CR = float(CR)
 
     @property
     def F(self) -> float:
@@ -65,9 +58,11 @@ class GCO(Optimizer):
 
     @F.setter
     def F(self, F: float) -> None:
-        if not isinstance(F, (float, int)):
-            raise e.TypeError("`F` must be a float or integer.")
-        self._F = F
+        if not isinstance(F, Real):
+            raise TypeError("`F` must be a float or integer.")
+        if F < 0:
+            raise ValueError("`F` must be non-negative.")
+        self._F = float(F)
 
     def compile(self, population) -> None:
         """Initialize cell life and selection counters.
@@ -78,6 +73,9 @@ class GCO(Optimizer):
         """
 
         n = population.n_agents
+        if n < 3:
+            raise ValueError("`population.n_agents` must be at least 3.")
+
         device = population.device
         self.life = torch.full((n,), 70.0, device=device, dtype=population.dtype)
         self.counter = torch.ones(n, device=device, dtype=population.dtype)
@@ -105,7 +103,7 @@ class GCO(Optimizer):
                 self.counter[i] = 1
 
             probs = self.counter / self.counter.sum()
-            idx = torch.multinomial(probs, 3, replacement=True)
+            idx = torch.multinomial(probs, 3, replacement=False)
 
             new_pos = pop.positions[i].clone()
             for j in range(pop.n_variables):

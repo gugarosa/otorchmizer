@@ -9,9 +9,6 @@ import torch
 
 from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class Space:
@@ -31,6 +28,7 @@ class Space:
         upper_bound: float | list | tuple | torch.Tensor = 1.0,
         mapping: list[str] | None = None,
         device: str | torch.device = "auto",
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Allocate an unbuilt population with broadcastable bounds.
 
@@ -42,33 +40,24 @@ class Space:
             upper_bound: Maximum possible values.
             mapping: Human-readable variable names.
             device: Device for tensor storage ("auto", "cpu", "cuda:0", etc.).
+            dtype: Storage dtype, or None to use the PyTorch default without an intermediate conversion.
 
         """
 
         self.device = DeviceManager(device).device
 
-        lb = self._to_tensor(lower_bound, n_variables)
-        ub = self._to_tensor(upper_bound, n_variables)
-
         self.population = Population(
             n_agents=n_agents,
             n_variables=n_variables,
             n_dimensions=n_dimensions,
-            lower_bound=lb,
-            upper_bound=ub,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
             mapping=mapping,
             device=self.device,
+            dtype=dtype,
         )
-
+        self.device = self.population.device
         self.built = False
-
-    @staticmethod
-    def _to_tensor(value: float | list | tuple | torch.Tensor, n_variables: int) -> torch.Tensor:
-        if isinstance(value, torch.Tensor):
-            return value.float()
-        if isinstance(value, (int, float)):
-            return torch.full((n_variables,), float(value))
-        return torch.tensor(value, dtype=torch.float32)
 
     @property
     def built(self) -> bool:
@@ -111,19 +100,10 @@ class Space:
         return self.population.best_fitness
 
     def build(self) -> None:
-        """Builds the space by initializing the population."""
+        """Initialize a fresh population, resetting its scores and best archive."""
 
         self._initialize()
         self.built = True
-
-        logger.debug(
-            "Agents: %d | Size: (%d, %d) | Device: %s | Built: %s.",
-            self.n_agents,
-            self.n_variables,
-            self.n_dimensions,
-            self.device,
-            self.built,
-        )
 
     def _initialize(self) -> None:
         self.population.initialize_uniform()

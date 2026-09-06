@@ -49,6 +49,8 @@ def generate_choice_distribution(
 
     """
 
+    if probs.ndim != 1 or probs.numel() != n:
+        raise ValueError("`probs` must contain exactly `n` weights.")
     return torch.multinomial(probs, size, replacement=False)
 
 

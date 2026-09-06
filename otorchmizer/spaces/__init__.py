@@ -4,7 +4,6 @@
 """Spaces package for search space implementations."""
 
 from otorchmizer.spaces.boolean import BooleanSpace
-from otorchmizer.spaces.graph import GraphSpace
 from otorchmizer.spaces.grid import GridSpace
 from otorchmizer.spaces.hyper_complex import HyperComplexSpace
 from otorchmizer.spaces.pareto import ParetoSpace
@@ -13,7 +12,6 @@ from otorchmizer.spaces.tree import TreeSpace
 
 __all__ = [
     "BooleanSpace",
-    "GraphSpace",
     "GridSpace",
     "HyperComplexSpace",
     "ParetoSpace",

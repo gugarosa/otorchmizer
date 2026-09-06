@@ -4,14 +4,13 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer
 from otorchmizer.core.population import Population
 from otorchmizer.core.space import Space
 from otorchmizer.otorchmizer import Otorchmizer
-from otorchmizer.utils.callback import CallbackVessel, DiscreteSearchCallback
+from otorchmizer.utils.callback import DiscreteSearchCallback
 
 
 def _population(n_agents=2, dtype=torch.float32):
@@ -52,7 +51,7 @@ def test_population_initialize_static_preserves_configured_dtype():
 def test_population_initialize_static_rejects_inconsistent_shape():
     population = _population()
 
-    with pytest.raises(e.SizeError, match="values"):
+    with pytest.raises(ValueError, match="values"):
         population.initialize_static(torch.zeros(3, 1))
 
     assert population.positions.shape == (2, 1, 1)
@@ -105,7 +104,7 @@ def test_population_scatter_uses_every_target_device():
 def test_population_scatter_rejects_impossible_target_counts(count):
     population = _population(n_agents=2)
 
-    with pytest.raises(e.ValueError, match="devices"):
+    with pytest.raises(ValueError, match="devices"):
         population.scatter([torch.device("cpu")] * count)
 
 
@@ -130,7 +129,7 @@ def test_population_gather_selects_best_without_float32_rounding():
 
 
 def test_population_gather_rejects_empty_input():
-    with pytest.raises(e.ValueError, match="populations"):
+    with pytest.raises(ValueError, match="populations"):
         Population.gather([], torch.device("cpu"))
 
 
@@ -144,7 +143,7 @@ def test_otorchmizer_update_uses_compiled_dispatch(monkeypatch):
     space.build()
     model = Otorchmizer(space, optimizer, Function(lambda x: x.sum()))
 
-    model.update(CallbackVessel())
+    model.update()
 
     assert calls == ["compiled"]
 

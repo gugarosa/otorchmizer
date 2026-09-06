@@ -11,22 +11,20 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class BA(Optimizer):
     """Bat Algorithm.
 
     Notes:
-        Vectorized echolocation-based search using frequency, velocity, and loudness.
+        Frequency follows the published non-negative range. Candidate positions are committed only when the
+        loudness test accepts an objective improvement, preserving matching position and fitness tensors.
 
     """
 
@@ -38,16 +36,12 @@ class BA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> BA.")
-
-        self.f_min = 0.0
-        self.f_max = 2.0
+        self._f_min = 0.0
+        self._f_max = 2.0
         self.A = 0.5
         self.r = 0.5
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def f_min(self) -> float:
@@ -57,8 +51,7 @@ class BA(Optimizer):
 
     @f_min.setter
     def f_min(self, f_min: float) -> None:
-        if not isinstance(f_min, (float, int)):
-            raise e.TypeError("`f_min` must be a float or integer.")
+        self._validate_frequencies(f_min, self.f_max)
         self._f_min = f_min
 
     @property
@@ -69,8 +62,7 @@ class BA(Optimizer):
 
     @f_max.setter
     def f_max(self, f_max: float) -> None:
-        if not isinstance(f_max, (float, int)):
-            raise e.TypeError("`f_max` must be a float or integer.")
+        self._validate_frequencies(self.f_min, f_max)
         self._f_max = f_max
 
     @property
@@ -82,7 +74,9 @@ class BA(Optimizer):
     @A.setter
     def A(self, A: float) -> None:
         if not isinstance(A, (float, int)):
-            raise e.TypeError("`A` must be a float or integer.")
+            raise TypeError("`A` must be a float or integer.")
+        if not math.isfinite(A) or A < 0:
+            raise ValueError("`A` must be finite and non-negative.")
         self._A = A
 
     @property
@@ -94,8 +88,38 @@ class BA(Optimizer):
     @r.setter
     def r(self, r: float) -> None:
         if not isinstance(r, (float, int)):
-            raise e.TypeError("`r` must be a float or integer.")
+            raise TypeError("`r` must be a float or integer.")
+        if not math.isfinite(r) or r < 0:
+            raise ValueError("`r` must be finite and non-negative.")
         self._r = r
+
+    @staticmethod
+    def _validate_frequencies(f_min: float, f_max: float) -> None:
+        for name, value in (("f_min", f_min), ("f_max", f_max)):
+            if not isinstance(value, (float, int)):
+                raise TypeError(f"`{name}` must be a float or integer.")
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"`{name}` must be finite and non-negative.")
+        if f_max < f_min:
+            raise ValueError("`f_max` must be greater than or equal to `f_min`.")
+
+    def build(self, params: dict[str, Any] | None = None) -> None:
+        """Apply overrides without transiently invalid frequency bounds.
+
+        Args:
+            params: Attribute overrides applied to the optimizer.
+
+        """
+
+        supplied = dict(params or {})
+        remaining = dict(supplied)
+        f_min = remaining.pop("f_min", self.f_min)
+        f_max = remaining.pop("f_max", self.f_max)
+        self._validate_frequencies(f_min, f_max)
+
+        super().build(remaining)
+        self._f_min, self._f_max = f_min, f_max
+        self.params.update({name: value for name, value in (("f_min", f_min), ("f_max", f_max)) if name in supplied})
 
     def compile(self, population) -> None:
         """Initialize persistent optimizer state.
@@ -107,9 +131,21 @@ class BA(Optimizer):
 
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
         self.velocity = torch.zeros(shape, device=population.device, dtype=population.dtype)
-        self.frequency = torch.zeros(population.n_agents, device=population.device, dtype=population.dtype)
-        self.loudness = torch.full((population.n_agents,), self.A, device=population.device, dtype=population.dtype)
-        self.pulse_rate = torch.full((population.n_agents,), self.r, device=population.device, dtype=population.dtype)
+        self.frequency = self.f_min + (self.f_max - self.f_min) * torch.rand(
+            population.n_agents,
+            device=population.device,
+            dtype=population.dtype,
+        )
+        self.loudness = self.A * torch.rand(
+            population.n_agents,
+            device=population.device,
+            dtype=population.dtype,
+        )
+        self.pulse_rate = self.r * torch.rand(
+            population.n_agents,
+            device=population.device,
+            dtype=population.dtype,
+        )
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -135,7 +171,7 @@ class BA(Optimizer):
         local_mask = r_test > self.pulse_rate
         if local_mask.any():
             mean_loud = self.loudness.mean()
-            noise = torch.randn_like(new_positions[local_mask]) * mean_loud
+            noise = 0.001 * torch.randn_like(new_positions[local_mask]) * mean_loud
             new_positions[local_mask] = best + noise
 
         lb = pop.lb.unsqueeze(0)
@@ -153,3 +189,4 @@ class BA(Optimizer):
         self.loudness[accept] *= 0.9
         decay = pop.positions.new_tensor(-0.9 * (ctx.iteration + 1))
         self.pulse_rate[accept] = self.r * (1 - torch.exp(decay))
+        pop.update_best()

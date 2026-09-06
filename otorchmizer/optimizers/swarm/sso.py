@@ -16,13 +16,9 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SSO(Optimizer):
@@ -36,15 +32,11 @@ class SSO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> SSO.")
-
         self._C_w = 0.1
         self._C_p = 0.4
         self._C_g = 0.9
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def C_w(self) -> float:
@@ -83,13 +75,13 @@ class SSO(Optimizer):
     def _validate_thresholds(C_w: float, C_p: float, C_g: float) -> None:
         for name, value in (("C_w", C_w), ("C_p", C_p), ("C_g", C_g)):
             if not isinstance(value, (float, int)):
-                raise e.TypeError(f"`{name}` must be a float or integer.")
+                raise TypeError(f"`{name}` must be a float or integer.")
         if not 0 <= C_w <= 1:
-            raise e.ValueError("`C_w` must be between 0 and 1.")
+            raise ValueError("`C_w` must be between 0 and 1.")
         if not C_w <= C_p <= 1:
-            raise e.ValueError("`C_p` must be between `C_w` and 1.")
+            raise ValueError("`C_p` must be between `C_w` and 1.")
         if not C_p <= C_g <= 1:
-            raise e.ValueError("`C_g` must be between `C_p` and 1.")
+            raise ValueError("`C_g` must be between `C_p` and 1.")
 
     def build(self, params: dict[str, Any] | None = None) -> None:
         """Apply parameter overrides without transiently invalid coupled thresholds.

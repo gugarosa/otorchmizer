@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class ABO(Optimizer):
@@ -34,14 +30,10 @@ class ABO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> ABO.")
-
         self.sunspot_ratio = 0.9
         self.a = 2.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def sunspot_ratio(self) -> float:
@@ -52,9 +44,9 @@ class ABO(Optimizer):
     @sunspot_ratio.setter
     def sunspot_ratio(self, sunspot_ratio: float) -> None:
         if not isinstance(sunspot_ratio, (float, int)):
-            raise e.TypeError("`sunspot_ratio` must be a float or integer.")
+            raise TypeError("`sunspot_ratio` must be a float or integer.")
         if not 0 <= sunspot_ratio <= 1:
-            raise e.ValueError("`sunspot_ratio` must be between 0 and 1.")
+            raise ValueError("`sunspot_ratio` must be between 0 and 1.")
         self._sunspot_ratio = sunspot_ratio
 
     @property
@@ -66,9 +58,9 @@ class ABO(Optimizer):
     @a.setter
     def a(self, a: float) -> None:
         if not isinstance(a, (float, int)):
-            raise e.TypeError("`a` must be a float or integer.")
+            raise TypeError("`a` must be a float or integer.")
         if a < 0:
-            raise e.ValueError("`a` must be non-negative.")
+            raise ValueError("`a` must be non-negative.")
         self._a = a
 
     def update(self, ctx: UpdateContext) -> None:

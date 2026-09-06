@@ -2,3 +2,7 @@
 # Licensed under the Apache License, Version 2.0.
 
 """Functions package for objective function wrappers."""
+
+from otorchmizer.functions.constrained import ConstrainedFunction
+
+__all__ = ["ConstrainedFunction"]

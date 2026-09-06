@@ -8,7 +8,6 @@ from collections.abc import Callable
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.space import Space
@@ -164,7 +163,7 @@ def test_de_requires_four_agents():
     optimizer = DE()
     space = _space(n_agents=3)
 
-    with pytest.raises(e.ValueError, match="at least 4"):
+    with pytest.raises(ValueError, match="at least 4"):
         optimizer.compile(space.population)
 
 
@@ -264,7 +263,7 @@ def test_epo_final_zero_based_iteration_is_nonsingular(monkeypatch):
 
     optimizer.update(_context(space, Function(_sphere), iteration=9, n_iterations=10))
 
-    t_profile = 10.0
+    t_profile = 11.0
     avoidance = 2 * (t_profile + 1) * 0.25 - t_profile
     social_force = abs(optimizer.f * torch.exp(torch.tensor(-9 / optimizer.l)) - torch.exp(torch.tensor(-9))) ** 2
     distance = abs(social_force * 2 - 0.25)
@@ -343,7 +342,7 @@ def test_rfo_full_replacement_retains_best_and_uses_frozen_habitat(monkeypatch):
     optimizer.update(_context(space, function))
 
     assert optimizer.n_replacement == space.population.n_agents
-    torch.testing.assert_close(space.population.positions, torch.full_like(space.population.positions, 1.125))
+    torch.testing.assert_close(space.population.positions, torch.full_like(space.population.positions, -3.875))
     assert space.population.best_position.item() == 0.75
     assert space.population.best_fitness.item() == 0.75**2
     assert torch.allclose(space.population.fitness, function(space.population.positions))
@@ -369,7 +368,7 @@ def test_gwo_requires_three_agents():
     optimizer = GWO()
     space = _space(n_agents=2)
 
-    with pytest.raises(e.ValueError, match="at least 3"):
+    with pytest.raises(ValueError, match="at least 3"):
         optimizer.compile(space.population)
 
 
@@ -377,7 +376,7 @@ def test_coa_rejects_more_packs_than_agents():
     optimizer = COA({"n_p": 3})
     space = _space(n_agents=2)
 
-    with pytest.raises(e.ValueError, match="must not exceed"):
+    with pytest.raises(ValueError, match="must not exceed"):
         optimizer.compile(space.population)
 
 

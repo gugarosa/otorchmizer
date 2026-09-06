@@ -6,7 +6,6 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.functions.constrained import ConstrainedFunction
 from otorchmizer.functions.multi_objective.standard import MultiObjectiveFunction
 from otorchmizer.functions.multi_objective.weighted import MultiObjectiveWeightedFunction
@@ -71,7 +70,7 @@ class TestConstrainedFunction:
         assert result.shape == (3,)
 
     def test_invalid_constraints_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             ConstrainedFunction(
                 pointer=lambda x: x.sum(),
                 constraints="not_a_list",
@@ -79,7 +78,7 @@ class TestConstrainedFunction:
             )
 
     def test_invalid_penalty_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             ConstrainedFunction(
                 pointer=lambda x: x.sum(),
                 constraints=[],
@@ -87,7 +86,7 @@ class TestConstrainedFunction:
             )
 
     def test_negative_penalty(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             ConstrainedFunction(
                 pointer=lambda x: x.sum(),
                 constraints=[],
@@ -127,7 +126,7 @@ class TestMultiObjectiveFunction:
         assert result.shape == (3, 1)
 
     def test_invalid_functions_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             MultiObjectiveFunction(functions="not_a_list")
 
 
@@ -159,14 +158,14 @@ class TestMultiObjectiveWeightedFunction:
         assert torch.allclose(result, torch.tensor([3.0, 3.0, 3.0]))
 
     def test_invalid_weights_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             MultiObjectiveWeightedFunction(
                 functions=[lambda x: x.sum()],
                 weights="not_a_list",
             )
 
     def test_weights_size_mismatch(self):
-        with pytest.raises(e.SizeError):
+        with pytest.raises(ValueError):
             MultiObjectiveWeightedFunction(
                 functions=[lambda x: x.sum(), lambda x: x.sum()],
                 weights=[1.0],

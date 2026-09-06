@@ -12,15 +12,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class EHO(Optimizer):
@@ -39,15 +36,11 @@ class EHO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> EHO.")
-
         self.alpha = 0.5
         self.beta = 0.1
-        self.n_clans = 2
+        self.n_clans = 10
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def alpha(self) -> float:
@@ -58,7 +51,9 @@ class EHO(Optimizer):
     @alpha.setter
     def alpha(self, alpha: float) -> None:
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+            raise TypeError("`alpha` must be a float or integer.")
+        if not math.isfinite(alpha) or not 0 <= alpha <= 1:
+            raise ValueError("`alpha` must be finite and between 0 and 1.")
         self._alpha = alpha
 
     @property
@@ -70,7 +65,9 @@ class EHO(Optimizer):
     @beta.setter
     def beta(self, beta: float) -> None:
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
+        if not math.isfinite(beta) or not 0 <= beta <= 1:
+            raise ValueError("`beta` must be finite and between 0 and 1.")
         self._beta = beta
 
     @property
@@ -82,9 +79,9 @@ class EHO(Optimizer):
     @n_clans.setter
     def n_clans(self, n_clans: int) -> None:
         if not isinstance(n_clans, int):
-            raise e.TypeError("`n_clans` must be an integer.")
+            raise TypeError("`n_clans` must be an integer.")
         if n_clans <= 0:
-            raise e.ValueError("`n_clans` must be positive.")
+            raise ValueError("`n_clans` must be positive.")
         self._n_clans = n_clans
 
     def compile(self, population) -> None:
@@ -99,10 +96,11 @@ class EHO(Optimizer):
         """
 
         self._validate_population(population)
+        self.n_ci = population.n_agents // self.n_clans
 
     def _validate_population(self, population) -> None:
         if self.n_clans > population.n_agents:
-            raise e.ValueError("`n_clans` must not exceed `population.n_agents`.")
+            raise ValueError("`n_clans` must not exceed `population.n_agents`.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -119,8 +117,9 @@ class EHO(Optimizer):
         n = pop.n_agents
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
-        n_per_clan = n // self.n_clans
+        n_per_clan = self.n_ci
 
+        worst_indices = []
         for clan_i in range(self.n_clans):
             start = clan_i * n_per_clan
             end = start + n_per_clan if clan_i < self.n_clans - 1 else n
@@ -140,13 +139,33 @@ class EHO(Optimizer):
 
             new_clan = new_clan.clamp(min=lb, max=ub)
             new_fit = fn(new_clan)
+            best_candidate = new_fit.argmin()
+            if new_fit[best_candidate] < pop.best_fitness:
+                pop.best_fitness = new_fit[best_candidate].clone()
+                pop.best_position = new_clan[best_candidate].clone()
 
             improved = new_fit < clan_fit
             pop.positions[start:end][improved] = new_clan[improved]
             pop.fitness[start:end][improved] = new_fit[improved]
+            worst_indices.append(start + pop.fitness[start:end].argmax())
 
-        worst_idx = pop.fitness.argmax()
-        pop.positions[worst_idx] = torch.rand(pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype) * (
-            ub.squeeze(0) - lb.squeeze(0)
-        ) + lb.squeeze(0)
-        pop.fitness[worst_idx] = fn(pop.positions[worst_idx].unsqueeze(0))[0]
+        worst_indices = torch.stack(worst_indices)
+        separated = (
+            torch.rand(
+                self.n_clans,
+                pop.n_variables,
+                pop.n_dimensions,
+                device=device,
+                dtype=pop.dtype,
+            )
+            * (ub - lb)
+            + lb
+        )
+        pop.positions[worst_indices] = separated
+        separated_fitness = fn(separated)
+        best_separated = separated_fitness.argmin()
+        if separated_fitness[best_separated] < pop.best_fitness:
+            pop.best_fitness = separated_fitness[best_separated].clone()
+            pop.best_position = separated[best_separated].clone()
+        pop.fitness[worst_indices] = separated_fitness
+        pop.update_best()

@@ -16,15 +16,12 @@ Notes:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class EP(Optimizer):
@@ -38,14 +35,10 @@ class EP(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> EP.")
-
         self.bout_size = 0.1
         self.clip_ratio = 0.05
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def bout_size(self) -> float:
@@ -55,11 +48,11 @@ class EP(Optimizer):
 
     @bout_size.setter
     def bout_size(self, bout_size: float) -> None:
-        if not isinstance(bout_size, (float, int)):
-            raise e.TypeError("`bout_size` must be a float or integer.")
+        if not isinstance(bout_size, Real):
+            raise TypeError("`bout_size` must be a float or integer.")
         if not 0 <= bout_size <= 1:
-            raise e.ValueError("`bout_size` must be between 0 and 1.")
-        self._bout_size = bout_size
+            raise ValueError("`bout_size` must be between 0 and 1.")
+        self._bout_size = float(bout_size)
 
     @property
     def clip_ratio(self) -> float:
@@ -69,11 +62,11 @@ class EP(Optimizer):
 
     @clip_ratio.setter
     def clip_ratio(self, clip_ratio: float) -> None:
-        if not isinstance(clip_ratio, (float, int)):
-            raise e.TypeError("`clip_ratio` must be a float or integer.")
+        if not isinstance(clip_ratio, Real):
+            raise TypeError("`clip_ratio` must be a float or integer.")
         if not 0 <= clip_ratio <= 1:
-            raise e.ValueError("`clip_ratio` must be between 0 and 1.")
-        self._clip_ratio = clip_ratio
+            raise ValueError("`clip_ratio` must be between 0 and 1.")
+        self._clip_ratio = float(clip_ratio)
 
     def compile(self, population) -> None:
         """Initialize one mutation strategy per agent.

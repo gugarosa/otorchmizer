@@ -11,15 +11,13 @@ References:
 
 from __future__ import annotations
 
+from math import isfinite
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class CEM(Optimizer):
@@ -38,14 +36,10 @@ class CEM(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> CEM.")
-
         self.n_updates = 5
         self.alpha = 0.7
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def n_updates(self) -> int:
@@ -71,10 +65,10 @@ class CEM(Optimizer):
 
         """
 
-        if not isinstance(n_updates, int):
-            raise e.TypeError("`n_updates` must be an integer.")
+        if not isinstance(n_updates, Integral):
+            raise TypeError("`n_updates` must be an integer.")
         if n_updates <= 0:
-            raise e.ValueError("`n_updates` must be positive.")
+            raise ValueError("`n_updates` must be positive.")
         self._n_updates = n_updates
 
     @property
@@ -97,11 +91,14 @@ class CEM(Optimizer):
 
         Raises:
             TypeError: If the supplied value has an invalid type.
+            ValueError: If the supplied value is negative or non-finite.
 
         """
 
-        if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+        if not isinstance(alpha, Real):
+            raise TypeError("`alpha` must be a real number.")
+        if not isfinite(alpha) or alpha < 0:
+            raise ValueError("`alpha` must be finite and non-negative.")
         self._alpha = alpha
 
     def compile(self, population) -> None:

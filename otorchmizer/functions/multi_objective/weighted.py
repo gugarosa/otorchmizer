@@ -9,11 +9,8 @@ from collections.abc import Callable
 
 import torch
 
-import otorchmizer.utils.exception as e
+from otorchmizer.core.function import _reject_nan
 from otorchmizer.functions.multi_objective.standard import MultiObjectiveFunction
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class MultiObjectiveWeightedFunction(MultiObjectiveFunction):
@@ -21,7 +18,7 @@ class MultiObjectiveWeightedFunction(MultiObjectiveFunction):
 
     Notes:
         Returns one fitness value per agent using z = Σ(wᵢ · fᵢ(x)).
-        Weights are stored in float32 and moved to the objective tensor's device during evaluation.
+        Weights retain their Python precision and are converted to the objective's device and dtype at evaluation.
 
     """
 
@@ -35,23 +32,18 @@ class MultiObjectiveWeightedFunction(MultiObjectiveFunction):
 
         Raises:
             TypeError: Functions or weights are not lists, or an objective is not callable.
-            SizeError: The number of weights differs from the number of objectives.
+            ValueError: The number of weights differs from the number of objectives.
 
         """
-
-        logger.info("Creating class: MultiObjectiveWeightedFunction.")
 
         super().__init__(functions, batch)
 
         if not isinstance(weights, list):
-            raise e.TypeError("`weights` should be a list.")
+            raise TypeError("`weights` should be a list.")
         if len(weights) != len(self.functions):
-            raise e.SizeError("`weights` should have the same size as `functions`.")
+            raise ValueError("`weights` should have the same size as `functions`.")
 
-        self.weights = torch.tensor(weights, dtype=torch.float32)
-
-        logger.debug("Weights: %s.", weights)
-        logger.info("Class created.")
+        self.weights = weights
 
     def __call__(self, positions: torch.Tensor) -> torch.Tensor:
         """Evaluates weighted sum of objectives.
@@ -62,8 +54,21 @@ class MultiObjectiveWeightedFunction(MultiObjectiveFunction):
         Returns:
             Scalarized fitness tensor of shape (n_agents,).
 
+        Raises:
+            ValueError: Eager objective or scalarized fitness contains NaN.
+            RuntimeError: Compiled objective or scalarized fitness contains NaN.
+
         """
 
         objectives = super().__call__(positions)
-        w = self.weights.to(objectives.device)
-        return (objectives * w).sum(dim=-1)
+        if len(self.weights) != len(self.functions):
+            raise ValueError("`weights` must have the same size as `functions`.")
+        dtype = torch.promote_types(objectives.dtype, positions.dtype)
+        if not dtype.is_floating_point:
+            dtype = torch.get_default_dtype()
+        w = torch.as_tensor(self.weights, device=objectives.device, dtype=dtype)
+        if w.ndim != 1:
+            raise ValueError("`weights` must be a vector of scalar values.")
+        result = (objectives * w).sum(dim=-1)
+        _reject_nan(result)
+        return result

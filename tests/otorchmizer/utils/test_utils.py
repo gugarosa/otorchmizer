@@ -1,17 +1,18 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Tests for utils — callback, history, logging, exception, constant."""
+"""Tests for callback, history, logging, and constant utilities."""
+
+import logging
 
 import pytest
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
+from otorchmizer.core.population import Population
 from otorchmizer.utils import logging as log_module
 from otorchmizer.utils.callback import (
     Callback,
-    CallbackVessel,
     CheckpointCallback,
     DiscreteSearchCallback,
 )
@@ -32,57 +33,6 @@ class TestCallback:
         cb.on_update_after(None)
 
 
-class TestCallbackVessel:
-    def test_creation_empty(self):
-        vessel = CallbackVessel()
-        assert vessel.callbacks == []
-
-    def test_creation_with_callbacks(self):
-        cb1 = Callback()
-        cb2 = Callback()
-        vessel = CallbackVessel([cb1, cb2])
-        assert len(vessel.callbacks) == 2
-
-    def test_invalid_callbacks_type(self):
-        with pytest.raises(e.TypeError):
-            CallbackVessel("not_a_list")
-
-    def test_dispatch_events(self):
-        events = []
-
-        class TrackingCallback(Callback):
-            def on_task_begin(self, opt_model):
-                events.append("begin")
-
-            def on_task_end(self, opt_model):
-                events.append("end")
-
-            def on_iteration_begin(self, iteration, opt_model):
-                events.append(f"iter_{iteration}")
-
-        vessel = CallbackVessel([TrackingCallback()])
-        vessel.on_task_begin(None)
-        vessel.on_iteration_begin(0, None)
-        vessel.on_task_end(None)
-        assert events == ["begin", "iter_0", "end"]
-
-    def test_multiple_callbacks_dispatched(self):
-        counts = {"a": 0, "b": 0}
-
-        class CbA(Callback):
-            def on_task_begin(self, opt_model):
-                counts["a"] += 1
-
-        class CbB(Callback):
-            def on_task_begin(self, opt_model):
-                counts["b"] += 1
-
-        vessel = CallbackVessel([CbA(), CbB()])
-        vessel.on_task_begin(None)
-        assert counts["a"] == 1
-        assert counts["b"] == 1
-
-
 class TestCheckpointCallback:
     def test_creation(self):
         cb = CheckpointCallback(file_path="test.pkl", frequency=10)
@@ -101,8 +51,6 @@ class TestDiscreteSearchCallback:
         assert cb.allowed_values == [[1, 2, 3]]
 
     def test_snap_to_nearest(self):
-        from otorchmizer.core.population import Population
-
         lb = torch.tensor([0.0])
         ub = torch.tensor([10.0])
         pop = Population(3, 1, 1, lb, ub)
@@ -127,7 +75,7 @@ class TestHistory:
         assert h.save_agents is True
 
     def test_invalid_save_agents(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             History(save_agents="yes")
 
     def test_dump_creates_attribute(self):
@@ -192,19 +140,20 @@ class TestHistory:
 class TestLogging:
     def test_get_logger(self):
         logger = log_module.get_logger("test_logger")
-        assert isinstance(logger, log_module.Logger)
+        assert logger is logging.getLogger("test_logger")
 
-    def test_logger_has_handlers(self):
-        logger = log_module.get_logger("test_handler_logger")
-        assert len(logger.handlers) >= 1
+    def test_logger_preserves_application_configuration(self):
+        logger = logging.getLogger("test_handler_logger")
+        logger.setLevel(logging.WARNING)
+        logger.propagate = True
+        handlers = logger.handlers.copy()
+        logger_class = logging.getLoggerClass()
 
-    def test_formatter(self):
-        assert log_module.FORMATTER is not None
-
-    def test_to_file(self):
-        logger = log_module.get_logger("test_to_file")
-        # Should not raise
-        logger.to_file("Test message to file")
+        assert log_module.get_logger(logger.name) is logger
+        assert logger.handlers == handlers
+        assert logger.level == logging.WARNING
+        assert logger.propagate
+        assert logging.getLoggerClass() is logger_class
 
 
 class TestConstants:
@@ -222,36 +171,3 @@ class TestConstants:
         assert c.FUNCTION_N_ARGS["SUM"] == 2
         assert c.FUNCTION_N_ARGS["EXP"] == 1
         assert len(c.FUNCTION_N_ARGS) == 10
-
-
-class TestExceptions:
-    def test_error(self):
-        with pytest.raises(e.Error):
-            raise e.Error("TestError", "test message")
-
-    def test_argument_error(self):
-        with pytest.raises(e.ArgumentError):
-            raise e.ArgumentError("wrong args")
-
-    def test_build_error(self):
-        with pytest.raises(e.BuildError):
-            raise e.BuildError("not built")
-
-    def test_size_error(self):
-        with pytest.raises(e.SizeError):
-            raise e.SizeError("wrong size")
-
-    def test_type_error(self):
-        with pytest.raises(e.TypeError):
-            raise e.TypeError("wrong type")
-
-    def test_value_error(self):
-        with pytest.raises(e.ValueError):
-            raise e.ValueError("wrong value")
-
-    def test_error_message_format(self):
-        try:
-            raise e.TypeError("bad type")
-        except e.TypeError as ex:
-            assert "TypeError" in str(ex)
-            assert "bad type" in str(ex)

@@ -4,7 +4,6 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.functions.constrained import ConstrainedFunction
 from otorchmizer.functions.multi_objective.standard import MultiObjectiveFunction
@@ -81,7 +80,7 @@ def test_function_does_not_retry_user_runtime_errors():
 def test_function_rejects_non_scalar_fitness_per_agent(batch):
     function = Function(lambda positions: positions, batch=batch)
 
-    with pytest.raises(e.SizeError, match="fitness"):
+    with pytest.raises(ValueError, match="fitness"):
         function(torch.ones(2, 3, 1))
 
 

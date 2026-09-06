@@ -1,12 +1,11 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Fruit Fly Optimization Algorithm.
+"""Fruit-Fly Optimization Algorithm.
 
 References:
     W.-T. Pan.
-    A new fruit fly optimization algorithm: taking the financial distress
-    model as an example.
+    A new Fruit Fly Optimization Algorithm: Taking the financial distress model as an example.
     Knowledge-Based Systems (2012).
 
 """
@@ -18,18 +17,10 @@ from typing import Any
 import torch
 
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class FFOA(Optimizer):
-    """Fruit Fly Optimization Algorithm.
-
-    Notes:
-        Osphresis (smell) and vision-based foraging.
-
-    """
+    """Fruit-Fly Optimization Algorithm."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -39,14 +30,21 @@ class FFOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> FFOA.")
-
         super().__init__(params)
 
-        logger.info("Class overrided.")
+    def compile(self, population) -> None:
+        """Initialize persistent x-axis and y-axis populations.
+
+        Args:
+            population: Population whose positions initialize both axes.
+
+        """
+
+        self.x_axis = population.positions.clone()
+        self.y_axis = population.positions.clone()
 
     def update(self, ctx: UpdateContext) -> None:
-        """Advance the population by one optimization step.
+        """Advance the population by one smell-based search step.
 
         Args:
             ctx: Population, objective function, and iteration state.
@@ -54,27 +52,30 @@ class FFOA(Optimizer):
         """
 
         pop = ctx.space.population
-        fn = ctx.function
-        device = pop.device
-        n = pop.n_agents
-
-        best = pop.best_position.unsqueeze(0)
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
-
-        noise = torch.rand(n, pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype)
-        new_positions = best + noise
-
-        dist = torch.sqrt(torch.sum(new_positions**2, dim=(1, 2)) + 1e-10)
-        S = 1.0 / dist
-
-        smell_positions = new_positions.clone()
-        for i in range(pop.n_variables):
-            smell_positions[:, i, :] = S.view(n, 1) * new_positions[:, i, :]
-
-        smell_positions = smell_positions.clamp(min=lb, max=ub)
-        new_fitness = fn(smell_positions)
-
-        improved = new_fitness < pop.fitness
+        x = self.x_axis + torch.rand(
+            pop.n_agents,
+            1,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        )
+        y = self.y_axis + torch.rand(
+            pop.n_agents,
+            1,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        )
+        distance = torch.sqrt(x.square() + y.square())
+        smell_positions = distance.clamp_min(torch.finfo(pop.dtype).tiny).reciprocal()
+        smell_positions = smell_positions.clamp(
+            min=pop.lb.unsqueeze(0),
+            max=pop.ub.unsqueeze(0),
+        )
+        smell_fitness = ctx.function(smell_positions)
+        improved = smell_fitness < pop.fitness
+        self.x_axis[improved] = x[improved]
+        self.y_axis[improved] = y[improved]
         pop.positions[improved] = smell_positions[improved]
-        pop.fitness[improved] = new_fitness[improved]
+        pop.fitness[improved] = smell_fitness[improved]
+        pop.update_best()

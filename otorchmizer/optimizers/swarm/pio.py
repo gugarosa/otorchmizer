@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class PIO(Optimizer):
@@ -40,15 +36,11 @@ class PIO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> PIO.")
-
         self._n_c1 = 150
         self._n_c2 = 200
         self.R = 0.2
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def n_c1(self) -> int:
@@ -75,13 +67,13 @@ class PIO(Optimizer):
     @staticmethod
     def _validate_thresholds(n_c1: int, n_c2: int) -> None:
         if not isinstance(n_c1, int):
-            raise e.TypeError("`n_c1` must be an integer.")
+            raise TypeError("`n_c1` must be an integer.")
         if not isinstance(n_c2, int):
-            raise e.TypeError("`n_c2` must be an integer.")
+            raise TypeError("`n_c2` must be an integer.")
         if n_c1 <= 0:
-            raise e.ValueError("`n_c1` must be positive.")
+            raise ValueError("`n_c1` must be positive.")
         if n_c2 < n_c1:
-            raise e.ValueError("`n_c2` must be greater than or equal to `n_c1`.")
+            raise ValueError("`n_c2` must be greater than or equal to `n_c1`.")
 
     def build(self, params: dict[str, Any] | None = None) -> None:
         """Apply parameter overrides without transiently invalid phase thresholds.
@@ -110,9 +102,9 @@ class PIO(Optimizer):
     @R.setter
     def R(self, R: float) -> None:
         if not isinstance(R, (float, int)):
-            raise e.TypeError("`R` must be a float or integer.")
+            raise TypeError("`R` must be a float or integer.")
         if R < 0:
-            raise e.ValueError("`R` must be non-negative.")
+            raise ValueError("`R` must be non-negative.")
         self._R = R
 
     @property
@@ -124,9 +116,9 @@ class PIO(Optimizer):
     @n_p.setter
     def n_p(self, n_p: int) -> None:
         if not isinstance(n_p, int):
-            raise e.TypeError("`n_p` must be an integer.")
+            raise TypeError("`n_p` must be an integer.")
         if n_p <= 0:
-            raise e.ValueError("`n_p` must be positive.")
+            raise ValueError("`n_p` must be positive.")
         self._n_p = n_p
 
     def compile(self, population) -> None:
@@ -164,7 +156,7 @@ class PIO(Optimizer):
             pop.positions = pop.positions + self.velocity
         elif ctx.iteration < self.n_c2:
             if not torch.isfinite(pop.fitness).all():
-                raise e.ValueError("`population.fitness` must contain only finite values.")
+                raise ValueError("`population.fitness` must contain only finite values.")
             self.n_p = min(self.n_p // 2 + 1, pop.n_agents)
             order = torch.argsort(pop.fitness)
             active_positions = pop.positions[order[: self.n_p]]

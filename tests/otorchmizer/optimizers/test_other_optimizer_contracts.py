@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.population import Population
@@ -133,7 +132,7 @@ def test_eo_generation_rate_includes_exponential_factor(monkeypatch):
 
 
 def test_eo_requires_positive_volume():
-    with pytest.raises(e.ValueError, match="`V` must be positive"):
+    with pytest.raises(ValueError, match="`V` must be positive"):
         EO({"V": 0})
 
 
@@ -202,7 +201,7 @@ def test_ci_rejects_invalid_fitness_values(invalid):
     optimizer = CI()
     optimizer.compile(population)
 
-    with pytest.raises(e.ValueError, match="must not contain NaN or negative infinity"):
+    with pytest.raises(ValueError, match="must not contain NaN or negative infinity"):
         optimizer.update(_context(population, Function(_sphere)))
 
 
@@ -211,7 +210,7 @@ def test_ci_rejects_an_entirely_unscored_population():
     optimizer = CI()
     optimizer.compile(population)
 
-    with pytest.raises(e.ValueError, match="`population.fitness` must contain at least one finite value"):
+    with pytest.raises(ValueError, match="`population.fitness` must contain at least one finite value"):
         optimizer.update(_context(population, Function(_sphere)))
 
 
@@ -284,7 +283,7 @@ def test_cem_constant_elites_have_zero_spread(monkeypatch):
     ],
 )
 def test_population_constraints_are_explicit(optimizer, population, message):
-    with pytest.raises((e.SizeError, e.ValueError), match=message):
+    with pytest.raises((ValueError, ValueError), match=message):
         optimizer.compile(population)
 
 

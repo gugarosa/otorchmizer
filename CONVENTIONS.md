@@ -6,8 +6,9 @@ project's architecture.
 
 ## Contracts
 
-- Preserve the public optimizer classes, constructor parameters, import paths, and
-  the `Space` + `Optimizer` + `Function` workflow.
+- Keep one canonical implementation per public optimizer and update its consumers
+  together when an explicitly versioned API change is required. Do not retain
+  compatibility aliases or parallel old/new module layouts.
 - Population positions have shape `(n_agents, n_variables, n_dimensions)`, and
   scalar fitness has shape `(n_agents,)`. Keep shape, device, and dtype metadata
   consistent with the stored tensors.
@@ -41,12 +42,15 @@ project's architecture.
   after it before code. Private helpers and framework-only callback overrides carry
   no docstring. User-facing optimizer methods remain documented.
 - Data classes document each field in an `Attributes:` section, one line per field.
-- Use specific exceptions and explicit `if`/`raise` validation, not runtime assertions.
-  Raised messages name a backticked offender and end with a period. Existing public
-  exception classes remain supported. Dependency exceptions are not blindly translated. (R1)
-- Reuse `get_logger(__name__)` from `otorchmizer.utils.logging`. Never print from library
-  modules. Warning/error diagnostics name a backticked offender and end with a period;
-  info/debug messages remain plain. Examples and benchmark command-line scripts may print. (R14)
+- Use specific builtin exceptions and explicit validation, not runtime assertions.
+  Raised messages name a backticked offender and end with a period. Do not wrap
+  builtin errors in parallel project-specific exception classes or log while raising.
+  Dependency exceptions are not blindly translated. (R1)
+- Reuse the standard named logger returned by `get_logger(__name__)` from
+  `otorchmizer.utils.logging`. Do not configure handlers, change Python's logger
+  class, create log files, or narrate routine construction from library modules.
+  Warning/error diagnostics name a backticked offender and end with a period.
+  Examples and command-line tools may print intentional results. (R14)
 - Comments explain why, not what. Prefer none or one line, cap comment blocks at three
   lines, avoid banner separators and trailing periods, and preserve attribution.
   Copyright/license notices retain their prescribed punctuation. (R8)

@@ -17,13 +17,9 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class CSA(Optimizer):
@@ -42,14 +38,10 @@ class CSA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> CSA.")
-
         self.fl = 2.0
         self.AP = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def fl(self) -> float:
@@ -60,7 +52,7 @@ class CSA(Optimizer):
     @fl.setter
     def fl(self, fl: float) -> None:
         if not isinstance(fl, (float, int)):
-            raise e.TypeError("`fl` must be a float or integer.")
+            raise TypeError("`fl` must be a float or integer.")
         self._fl = fl
 
     @property
@@ -72,9 +64,9 @@ class CSA(Optimizer):
     @AP.setter
     def AP(self, AP: float) -> None:
         if not isinstance(AP, (float, int)):
-            raise e.TypeError("`AP` must be a float or integer.")
+            raise TypeError("`AP` must be a float or integer.")
         if not 0 <= AP <= 1:
-            raise e.ValueError("`AP` must be between 0 and 1.")
+            raise ValueError("`AP` must be between 0 and 1.")
         self._AP = AP
 
     def compile(self, population: Population) -> None:

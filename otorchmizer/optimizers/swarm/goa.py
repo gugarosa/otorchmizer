@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GOA(Optimizer):
@@ -39,16 +35,12 @@ class GOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GOA.")
-
-        self.c_min = 0.00004
+        self.c_min = 0.00001
         self.c_max = 1.0
         self.f = 0.5
         self.l = 1.5
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def c_min(self) -> float:
@@ -59,7 +51,7 @@ class GOA(Optimizer):
     @c_min.setter
     def c_min(self, c_min: float) -> None:
         if not isinstance(c_min, (float, int)):
-            raise e.TypeError("`c_min` must be a float or integer.")
+            raise TypeError("`c_min` must be a float or integer.")
         self._c_min = c_min
 
     @property
@@ -71,7 +63,7 @@ class GOA(Optimizer):
     @c_max.setter
     def c_max(self, c_max: float) -> None:
         if not isinstance(c_max, (float, int)):
-            raise e.TypeError("`c_max` must be a float or integer.")
+            raise TypeError("`c_max` must be a float or integer.")
         self._c_max = c_max
 
     @property
@@ -83,19 +75,19 @@ class GOA(Optimizer):
     @f.setter
     def f(self, f: float) -> None:
         if not isinstance(f, (float, int)):
-            raise e.TypeError("`f` must be a float or integer.")
+            raise TypeError("`f` must be a float or integer.")
         self._f = f
 
     @property
-    def l(self) -> float:  # noqa: E743  # Public API name retained for compatibility
+    def l(self) -> float:  # noqa: E743
         """Return the attraction length scale."""
 
         return self._l
 
     @l.setter
-    def l(self, l: float) -> None:  # noqa: E741, E743  # Public API name retained for compatibility
+    def l(self, l: float) -> None:  # noqa: E741, E743
         if not isinstance(l, (float, int)):
-            raise e.TypeError("`l` must be a float or integer.")
+            raise TypeError("`l` must be a float or integer.")
         self._l = l
 
     def update(self, ctx: UpdateContext) -> None:

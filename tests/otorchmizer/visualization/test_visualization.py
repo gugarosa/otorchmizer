@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.visualization import convergence, surface
 
 
@@ -53,11 +52,11 @@ class TestConvergencePlot:
         convergence.plot([1, 2], [3, 4], labels=["x", "y"], title="Title", subtitle="Sub", xlabel="step", ylabel="val")
 
     def test_invalid_labels_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             convergence.plot([1, 2, 3], labels="not_a_list")
 
     def test_labels_size_mismatch(self):
-        with pytest.raises(e.SizeError):
+        with pytest.raises(ValueError):
             convergence.plot([1, 2], [3, 4], labels=["only_one"])
 
 

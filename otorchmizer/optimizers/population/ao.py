@@ -11,16 +11,13 @@ References:
 
 from __future__ import annotations
 
+from numbers import Integral, Real
 from typing import Any
 
 import torch
 
 import otorchmizer.math.distribution as d
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class AO(Optimizer):
@@ -34,8 +31,6 @@ class AO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> AO.")
-
         self.alpha = 0.1
         self.delta = 0.1
         self.n_cycles = 10
@@ -43,8 +38,6 @@ class AO(Optimizer):
         self.w = 0.005
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def alpha(self) -> float:
@@ -54,11 +47,11 @@ class AO(Optimizer):
 
     @alpha.setter
     def alpha(self, alpha: float) -> None:
-        if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+        if not isinstance(alpha, Real):
+            raise TypeError("`alpha` must be a float or integer.")
         if alpha < 0:
-            raise e.ValueError("`alpha` must be non-negative.")
-        self._alpha = alpha
+            raise ValueError("`alpha` must be non-negative.")
+        self._alpha = float(alpha)
 
     @property
     def delta(self) -> float:
@@ -68,11 +61,11 @@ class AO(Optimizer):
 
     @delta.setter
     def delta(self, delta: float) -> None:
-        if not isinstance(delta, (float, int)):
-            raise e.TypeError("`delta` must be a float or integer.")
+        if not isinstance(delta, Real):
+            raise TypeError("`delta` must be a float or integer.")
         if delta < 0:
-            raise e.ValueError("`delta` must be non-negative.")
-        self._delta = delta
+            raise ValueError("`delta` must be non-negative.")
+        self._delta = float(delta)
 
     @property
     def n_cycles(self) -> int:
@@ -82,11 +75,11 @@ class AO(Optimizer):
 
     @n_cycles.setter
     def n_cycles(self, n_cycles: int) -> None:
-        if not isinstance(n_cycles, int):
-            raise e.TypeError("`n_cycles` must be an integer.")
+        if not isinstance(n_cycles, Integral):
+            raise TypeError("`n_cycles` must be an integer.")
         if n_cycles <= 0:
-            raise e.ValueError("`n_cycles` must be positive.")
-        self._n_cycles = n_cycles
+            raise ValueError("`n_cycles` must be positive.")
+        self._n_cycles = int(n_cycles)
 
     @property
     def U(self) -> float:
@@ -96,11 +89,11 @@ class AO(Optimizer):
 
     @U.setter
     def U(self, U: float) -> None:
-        if not isinstance(U, (float, int)):
-            raise e.TypeError("`U` must be a float or integer.")
+        if not isinstance(U, Real):
+            raise TypeError("`U` must be a float or integer.")
         if U < 0:
-            raise e.ValueError("`U` must be non-negative.")
-        self._U = U
+            raise ValueError("`U` must be non-negative.")
+        self._U = float(U)
 
     @property
     def w(self) -> float:
@@ -110,11 +103,11 @@ class AO(Optimizer):
 
     @w.setter
     def w(self, w: float) -> None:
-        if not isinstance(w, (float, int)):
-            raise e.TypeError("`w` must be a float or integer.")
+        if not isinstance(w, Real):
+            raise TypeError("`w` must be a float or integer.")
         if w < 0:
-            raise e.ValueError("`w` must be non-negative.")
-        self._w = w
+            raise ValueError("`w` must be non-negative.")
+        self._w = float(w)
 
     def update(self, ctx: UpdateContext) -> None:
         """Move agents with the iteration-appropriate hunting strategies.

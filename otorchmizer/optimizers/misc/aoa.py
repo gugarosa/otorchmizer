@@ -16,11 +16,7 @@ from typing import Any
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class AOA(Optimizer):
@@ -39,16 +35,12 @@ class AOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> AOA.")
-
         self.a_min = 0.2
         self.a_max = 1.0
         self.alpha = 5.0
         self.mu = 0.499
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def a_min(self) -> float:
@@ -74,7 +66,7 @@ class AOA(Optimizer):
         """
 
         if not isinstance(a_min, (float, int)):
-            raise e.TypeError("`a_min` must be a float or integer.")
+            raise TypeError("`a_min` must be a float or integer.")
         self._a_min = a_min
 
     @property
@@ -101,7 +93,7 @@ class AOA(Optimizer):
         """
 
         if not isinstance(a_max, (float, int)):
-            raise e.TypeError("`a_max` must be a float or integer.")
+            raise TypeError("`a_max` must be a float or integer.")
         self._a_max = a_max
 
     @property
@@ -128,7 +120,7 @@ class AOA(Optimizer):
         """
 
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` must be a float or integer.")
+            raise TypeError("`alpha` must be a float or integer.")
         self._alpha = alpha
 
     @property
@@ -155,7 +147,7 @@ class AOA(Optimizer):
         """
 
         if not isinstance(mu, (float, int)):
-            raise e.TypeError("`mu` must be a float or integer.")
+            raise TypeError("`mu` must be a float or integer.")
         self._mu = mu
 
     def update(self, ctx: UpdateContext) -> None:

@@ -12,15 +12,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class JS(Optimizer):
@@ -34,15 +31,11 @@ class JS(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> JS.")
-
         self.eta = 4.0
         self.beta = 3.0
         self.gamma = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def eta(self) -> float:
@@ -53,9 +46,9 @@ class JS(Optimizer):
     @eta.setter
     def eta(self, eta: float) -> None:
         if not isinstance(eta, (float, int)):
-            raise e.TypeError("`eta` must be a float or integer.")
-        if not 0 < eta <= 4:
-            raise e.ValueError("`eta` must be greater than 0 and at most 4.")
+            raise TypeError("`eta` must be a float or integer.")
+        if not math.isfinite(eta) or not 0 < eta <= 4:
+            raise ValueError("`eta` must be finite, greater than 0, and at most 4.")
         self._eta = eta
 
     @property
@@ -67,9 +60,9 @@ class JS(Optimizer):
     @beta.setter
     def beta(self, beta: float) -> None:
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
-        if beta <= 0:
-            raise e.ValueError("`beta` must be positive.")
+            raise TypeError("`beta` must be a float or integer.")
+        if not math.isfinite(beta) or beta <= 0:
+            raise ValueError("`beta` must be finite and positive.")
         self._beta = beta
 
     @property
@@ -81,9 +74,9 @@ class JS(Optimizer):
     @gamma.setter
     def gamma(self, gamma: float) -> None:
         if not isinstance(gamma, (float, int)):
-            raise e.TypeError("`gamma` must be a float or integer.")
-        if gamma <= 0:
-            raise e.ValueError("`gamma` must be positive.")
+            raise TypeError("`gamma` must be a float or integer.")
+        if not math.isfinite(gamma) or gamma <= 0:
+            raise ValueError("`gamma` must be finite and positive.")
         self._gamma = gamma
 
     def compile(self, population) -> None:
@@ -188,11 +181,7 @@ class NBJS(JS):
 
         """
 
-        logger.info("Overriding class: JS -> NBJS.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def _motion_a(self, pop) -> torch.Tensor:
         return self.gamma * torch.rand(

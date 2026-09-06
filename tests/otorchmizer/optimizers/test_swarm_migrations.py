@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.population import Population
+from otorchmizer.optimizers import swarm
 from otorchmizer.optimizers.swarm import ABO, FSO, JS, NBJS, PIO, SFO, SSO
 from otorchmizer.optimizers.swarm import fso as fso_module
 
@@ -84,7 +84,7 @@ def test_canonical_migrations_remove_mislabeled_parameter_surfaces():
     ],
 )
 def test_canonical_parameters_reject_invalid_ranges(optimizer_class, params, name):
-    with pytest.raises(e.ValueError, match=name):
+    with pytest.raises(ValueError, match=name):
         optimizer_class(params)
 
 
@@ -256,7 +256,7 @@ def test_sso_applies_all_four_canonical_sources(monkeypatch):
 def test_sso_rejects_invalid_probability_thresholds(name, value):
     optimizer = SSO()
 
-    with pytest.raises(e.ValueError, match=name):
+    with pytest.raises(ValueError, match=name):
         setattr(optimizer, name, value)
 
 
@@ -272,7 +272,7 @@ def test_sso_build_rejects_an_invalid_single_coupled_override_atomically():
     optimizer = SSO()
     before = (optimizer.C_w, optimizer.C_p, optimizer.C_g)
 
-    with pytest.raises(e.ValueError, match="C_p"):
+    with pytest.raises(ValueError, match="C_p"):
         optimizer.build({"C_w": 0.5})
 
     assert (optimizer.C_w, optimizer.C_p, optimizer.C_g) == before
@@ -368,7 +368,7 @@ def test_pio_rejects_nonfinite_population_fitness(invalid):
     optimizer = PIO({"n_c1": 1, "n_c2": 2})
     optimizer.compile(population)
 
-    with pytest.raises(e.ValueError, match="population.fitness"):
+    with pytest.raises(ValueError, match="population.fitness"):
         optimizer.update(_context(population, Function(lambda position: position.sum()), iteration=1))
 
 
@@ -384,7 +384,7 @@ def test_pio_build_rejects_an_invalid_single_coupled_override_atomically():
     optimizer = PIO({"n_c1": 10, "n_c2": 20})
     before = (optimizer.n_c1, optimizer.n_c2)
 
-    with pytest.raises(e.ValueError, match="n_c2"):
+    with pytest.raises(ValueError, match="n_c2"):
         optimizer.build({"n_c1": 30})
 
     assert (optimizer.n_c1, optimizer.n_c2) == before
@@ -535,8 +535,6 @@ def test_sfo_archives_replenished_prey_before_the_next_iteration(monkeypatch):
 
 
 def test_canonical_swarm_exports_include_nbjs():
-    from otorchmizer.optimizers import swarm
-
     assert "NBJS" in swarm.__all__
     assert swarm.NBJS is NBJS
 

@@ -10,7 +10,6 @@ import pytest
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.node import Node
 from otorchmizer.core.optimizer import UpdateContext
@@ -69,15 +68,15 @@ class TestFARegressions:
         assert fa.gamma == 1.0
 
     def test_alpha_validation(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             FA({"alpha": -1.0})
 
     def test_beta_validation(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             FA({"beta": -0.5})
 
     def test_gamma_validation(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             FA({"gamma": -1.0})
 
     def test_alpha_decay(self):

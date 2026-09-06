@@ -17,9 +17,6 @@ from typing import Any
 import torch
 
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class SOS(Optimizer):
@@ -38,11 +35,7 @@ class SOS(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> SOS.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.

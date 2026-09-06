@@ -16,11 +16,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class WCA(Optimizer):
@@ -39,14 +35,10 @@ class WCA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> WCA.")
-
         self.nsr = 2
         self.d_max = 0.1
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def nsr(self) -> int:
@@ -73,9 +65,9 @@ class WCA(Optimizer):
         """
 
         if not isinstance(nsr, int):
-            raise e.TypeError("`nsr` must be an integer.")
+            raise TypeError("`nsr` must be an integer.")
         if nsr <= 1:
-            raise e.ValueError("`nsr` must be greater than 1.")
+            raise ValueError("`nsr` must be greater than 1.")
         self._nsr = nsr
 
     @property
@@ -102,7 +94,7 @@ class WCA(Optimizer):
         """
 
         if not isinstance(d_max, (float, int)):
-            raise e.TypeError("`d_max` must be a float or integer.")
+            raise TypeError("`d_max` must be a float or integer.")
         self._d_max = d_max
 
     def compile(self, population) -> None:
@@ -114,7 +106,7 @@ class WCA(Optimizer):
         """
 
         if population.n_agents < self.nsr:
-            raise e.SizeError("`population.n_agents` must be at least `nsr`.")
+            raise ValueError("`population.n_agents` must be at least `nsr`.")
 
         self.flows = torch.zeros(self.nsr, dtype=torch.long, device=population.device)
 

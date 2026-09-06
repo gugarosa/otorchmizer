@@ -6,7 +6,6 @@
 import pytest
 import torch
 
-from otorchmizer.core.agent_view import AgentView
 from otorchmizer.core.device import DeviceManager
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
@@ -98,20 +97,6 @@ class TestPopulation:
         assert torch.equal(cloned, pop.positions)
         cloned[0] = 999.0
         assert not torch.equal(cloned, pop.positions)
-
-
-class TestAgentView:
-    def test_view_access(self):
-        lb = torch.tensor([0.0, 0.0])
-        ub = torch.tensor([1.0, 1.0])
-        pop = Population(5, 2, 1, lb, ub)
-        pop.initialize_uniform()
-        pop.fitness = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        view = AgentView(pop, 1)
-        assert view.fit == 2.0
-        assert view.position.shape == (2, 1)
-        assert view.n_variables == 2
 
 
 class TestFunction:

@@ -3,6 +3,8 @@
 
 """Boolean-based optimizers for binary/discrete optimization."""
 
-from otorchmizer.optimizers.boolean.boolean import BMRFO, BPSO, UMDA
+from otorchmizer.optimizers.boolean.bmrfo import BMRFO
+from otorchmizer.optimizers.boolean.bpso import BPSO
+from otorchmizer.optimizers.boolean.umda import UMDA
 
 __all__ = ["BMRFO", "BPSO", "UMDA"]

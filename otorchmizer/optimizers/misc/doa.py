@@ -15,11 +15,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class DOA(Optimizer):
@@ -38,13 +34,9 @@ class DOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> DOA.")
-
         self.r = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def r(self) -> float:
@@ -70,7 +62,7 @@ class DOA(Optimizer):
         """
 
         if not isinstance(r, (float, int)):
-            raise e.TypeError("`r` must be a float or integer.")
+            raise TypeError("`r` must be a float or integer.")
         self._r = r
 
     def compile(self, population) -> None:

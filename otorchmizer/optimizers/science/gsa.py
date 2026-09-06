@@ -16,11 +16,7 @@ from typing import Any
 import torch
 
 import otorchmizer.utils.constant as c
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GSA(Optimizer):
@@ -39,13 +35,9 @@ class GSA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GSA.")
-
         self.G = 2.467
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def G(self) -> float:
@@ -72,9 +64,9 @@ class GSA(Optimizer):
         """
 
         if not isinstance(G, (float, int)):
-            raise e.TypeError("`G` must be a float or integer.")
+            raise TypeError("`G` must be a float or integer.")
         if G < 0:
-            raise e.ValueError("`G` must be non-negative.")
+            raise ValueError("`G` must be non-negative.")
         self._G = G
 
     def compile(self, population) -> None:

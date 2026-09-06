@@ -15,11 +15,7 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GWO(Optimizer):
@@ -33,11 +29,7 @@ class GWO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GWO.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def compile(self, population) -> None:
         """Validate that alpha, beta, and delta leaders are available.
@@ -51,7 +43,7 @@ class GWO(Optimizer):
         """
 
         if population.n_agents < 3:
-            raise e.ValueError("`population.n_agents` must be at least 3.")
+            raise ValueError("`population.n_agents` must be at least 3.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Move all wolves relative to the three leading candidates.

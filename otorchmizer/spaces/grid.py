@@ -5,13 +5,11 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.space import Space
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class GridSpace(Space):
@@ -25,6 +23,7 @@ class GridSpace(Space):
         upper_bound: float | list[float] | tuple[float, ...] | torch.Tensor,
         mapping: list[str] | None = None,
         device: str | torch.device = "auto",
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize a grid search space.
 
@@ -35,17 +34,17 @@ class GridSpace(Space):
             upper_bound: Upper bound for each decision variable.
             mapping: Human-readable names for the decision variables.
             device: Device used to store population tensors.
+            dtype: Storage dtype, or None to use the PyTorch default.
 
         Raises:
-            SizeError: If `step` does not contain one value per decision variable.
+            ValueError: If `step` does not contain one value per decision variable.
             ValueError: If `step` contains a nonfinite or nonpositive value.
 
         Notes:
             The Cartesian product of the bounded ranges determines the number of agents.
+            Coordinates use wider intermediate arithmetic before conversion to the population's storage dtype.
 
         """
-
-        logger.info("Creating class: GridSpace.")
 
         super().__init__(
             n_agents=1,
@@ -55,35 +54,35 @@ class GridSpace(Space):
             upper_bound=upper_bound,
             mapping=mapping,
             device=device,
+            dtype=dtype,
         )
 
-        step_t = self._to_tensor(step, n_variables)
-        self.step = step_t.to(self.device)
+        self.step = torch.as_tensor(step, device=self.device, dtype=self.population.dtype)
+        if self.step.ndim == 0:
+            self.step = self.step.expand(n_variables)
         if self.step.shape != (n_variables,):
-            raise e.SizeError(f"`step` must have shape {(n_variables,)}, but got {tuple(self.step.shape)}.")
+            raise ValueError(f"`step` must have shape {(n_variables,)}, but got {tuple(self.step.shape)}.")
         if not torch.isfinite(self.step).all() or (self.step <= 0).any():
-            raise e.ValueError("`step` must contain finite positive values.")
+            raise ValueError("`step` must contain finite positive values.")
 
         self._create_grid()
         self.build()
-
-        logger.info("Class created.")
 
     def _create_grid(self) -> None:
         lb = self.population.lb.squeeze(-1)
         ub = self.population.ub.squeeze(-1)
         step = self.step
+        working_dtype = torch.float32 if self.population.dtype == torch.float16 else torch.float64
 
-        ranges = [
-            torch.arange(
-                lb[i].item(),
-                ub[i].item() + step[i].item(),
-                step[i].item(),
-                device=self.device,
-            )
-            for i in range(self.population.n_variables)
-        ]
-        ranges = [values[values <= ub[i]] for i, values in enumerate(ranges)]
+        ranges = []
+        for lower, upper, spacing in zip(lb, ub, step):
+            low, high, stride = lower.item(), upper.item(), spacing.item()
+            n_steps = math.ceil((high - low) / stride)
+            values = low + stride * torch.arange(n_steps + 1, device=self.device, dtype=working_dtype)
+            tolerance = min(stride / 2, 2 * torch.finfo(self.population.dtype).eps * max(abs(low), abs(high)))
+            values = values[(values <= upper) | ((values - upper).abs() <= tolerance)]
+            values = torch.where((values - high).abs() <= tolerance, high, values)
+            ranges.append(values.to(dtype=self.population.dtype))
 
         mesh = torch.meshgrid(*ranges, indexing="ij")
         grid = torch.stack([m.ravel() for m in mesh], dim=1)
@@ -100,6 +99,7 @@ class GridSpace(Space):
             upper_bound=new_ub.squeeze(-1),
             mapping=self.population.mapping,
             device=self.device,
+            dtype=self.population.dtype,
         )
 
         self.grid = grid

@@ -17,9 +17,6 @@ import torch
 
 import otorchmizer.math.distribution as d
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class HHO(Optimizer):
@@ -33,11 +30,7 @@ class HHO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> HHO.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Move each hawk according to its sampled energy and strategy.

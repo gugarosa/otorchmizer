@@ -17,9 +17,6 @@ from typing import Any
 import torch
 
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class AEO(Optimizer):
@@ -33,11 +30,7 @@ class AEO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> AEO.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population through composition and decomposition.
@@ -69,10 +62,8 @@ class AEO(Optimizer):
 
             if i == 0:
                 alpha = (1 - t) * torch.rand(1, device=device, dtype=pop.dtype)
-                new_pos = (
-                    (1 - alpha) * best.squeeze(0)
-                    + alpha * torch.rand_like(new_pos) * (ub.squeeze(0) - lb.squeeze(0))
-                    + lb.squeeze(0)
+                new_pos = (1 - alpha) * best.squeeze(0) + alpha * (
+                    torch.rand_like(new_pos) * (ub.squeeze(0) - lb.squeeze(0)) + lb.squeeze(0)
                 )
             elif r1 < 1.0 / 3:
                 C = (
@@ -87,7 +78,7 @@ class AEO(Optimizer):
                     * torch.randn(1, device=device, dtype=pop.dtype)
                     / torch.abs(torch.randn(1, device=device, dtype=pop.dtype) + 1e-10)
                 )
-                j = torch.randint(1, n, (1,), device=device).item()
+                j = 1 if i == 1 else torch.randint(1, i, (1,), device=device).item()
                 r2 = torch.rand(1, device=device, dtype=pop.dtype)
                 new_pos = positions_sorted[i] + C * (
                     r2 * (positions_sorted[i] - positions_sorted[0])
@@ -99,7 +90,7 @@ class AEO(Optimizer):
                     * torch.randn(1, device=device, dtype=pop.dtype)
                     / torch.abs(torch.randn(1, device=device, dtype=pop.dtype) + 1e-10)
                 )
-                j = torch.randint(1, n, (1,), device=device).item()
+                j = 1 if i == 1 else torch.randint(1, i, (1,), device=device).item()
                 new_pos = positions_sorted[i] + C * (positions_sorted[i] - positions_sorted[j])
 
             new_pos = new_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))

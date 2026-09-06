@@ -6,7 +6,6 @@
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.node import Node
 
 
@@ -45,35 +44,35 @@ class TestNodeCreation:
 
 class TestNodeValidation:
     def test_invalid_name_type(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             Node(3.14, "TERMINAL", value=torch.tensor([1.0]))
 
     def test_invalid_category(self):
-        with pytest.raises(e.ValueError):
+        with pytest.raises(ValueError):
             Node("x", "INVALID", value=torch.tensor([1.0]))
 
     def test_terminal_requires_tensor_value(self):
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             Node(0, "TERMINAL", value=42)
 
     def test_invalid_left_child(self):
         node = Node("SUM", "FUNCTION")
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             node.left = "not_a_node"
 
     def test_invalid_right_child(self):
         node = Node("SUM", "FUNCTION")
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             node.right = "not_a_node"
 
     def test_invalid_parent(self):
         node = Node(0, "TERMINAL", value=torch.tensor([1.0]))
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             node.parent = "not_a_node"
 
     def test_invalid_flag(self):
         node = Node("SUM", "FUNCTION")
-        with pytest.raises(e.TypeError):
+        with pytest.raises(TypeError):
             node.flag = "true"
 
 

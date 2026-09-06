@@ -10,7 +10,6 @@ import pytest
 import torch
 
 import otorchmizer.math.random as r
-import otorchmizer.utils.exception as e
 from otorchmizer.core import Function, Population, UpdateContext
 from otorchmizer.optimizers.boolean import UMDA
 from otorchmizer.optimizers.science import WDO
@@ -137,5 +136,5 @@ def test_umda_canonical_probability_bounds_control_samples(monkeypatch, probabil
 
 @pytest.mark.parametrize("params", [{"p_selection": 0}, {"lower_bound": 0.8, "upper_bound": 0.2}])
 def test_umda_rejects_invalid_selection_and_probability_intervals(params):
-    with pytest.raises(e.ValueError):
+    with pytest.raises(ValueError):
         UMDA(params)

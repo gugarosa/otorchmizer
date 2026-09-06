@@ -7,6 +7,10 @@ import pytest
 import torch
 
 from otorchmizer.core import DeviceManager, Population
+from otorchmizer.functions import ConstrainedFunction
+from otorchmizer.functions.multi_objective import MultiObjectiveWeightedFunction
+from otorchmizer.spaces import GridSpace, SearchSpace
+from otorchmizer.utils.callback import DiscreteSearchCallback
 
 pytestmark = [
     pytest.mark.gpu,
@@ -66,3 +70,24 @@ def test_mixed_cpu_cuda_scatter_gather_preserves_float64_population():
     assert torch.equal(merged.fitness, population.fitness)
     assert torch.equal(merged.best_position, population.best_position)
     assert torch.equal(merged.best_fitness, population.best_fitness)
+
+
+def test_cuda_support_contracts_preserve_precision_bounds_and_archive_ownership():
+    space = SearchSpace(2, 1, [1.00000001], [1.00000002], dtype=torch.float64, device="cuda:0")
+    assert space.population.lb.item() == 1.00000001
+    space.population.positions.fill_(1.000000019)
+    DiscreteSearchCallback([[1.00000001, 1.00000002]]).on_evaluate_before(space.population, None)
+    assert (space.population.positions == 1.00000002).all()
+    weighted = MultiObjectiveWeightedFunction([lambda x: x.new_tensor(1.0)], [1.00000001])
+    result = weighted(space.population.positions)
+    assert result.is_cuda
+    assert result[0].item() == 1.00000001
+    constrained = ConstrainedFunction(lambda x: x.sum(), [lambda x: x.new_tensor(True)], penalty=1)
+    assert torch.isposinf(constrained(torch.full((2, 1, 1), torch.inf, device="cuda:0"))).all()
+    grid = GridSpace(1, 0.1, 0, 0.9, device="cuda:0", dtype=torch.float64)
+    assert grid.n_agents == 10
+    assert grid.grid[-1, 0].item() == 0.9
+    shards = space.population.scatter([torch.device("cuda:0"), torch.device("cpu")])
+    before = space.population.best_position.clone()
+    shards[0].best_position.zero_()
+    assert torch.equal(space.population.best_position, before)

@@ -7,7 +7,6 @@ from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
@@ -45,7 +44,7 @@ class NDS(Optimizer):
         self.n_pareto_points = 0
         super().__init__(params)
         if not isinstance(self.maximize, bool):
-            raise e.TypeError("`maximize` must be a Boolean.")
+            raise TypeError("`maximize` must be a Boolean.")
 
     def compile(self, population: Population) -> None:
         """Allocate front ranks and domination state.
@@ -75,7 +74,7 @@ class NDS(Optimizer):
 
         values = population.positions.flatten(1)
         if torch.isnan(values).any():
-            raise e.ValueError("`population.positions` must not contain NaN objective values.")
+            raise ValueError("`population.positions` must not contain NaN objective values.")
 
         self.set.fill_(True)
         strict = torch.zeros_like(self.set)

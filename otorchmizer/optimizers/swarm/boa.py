@@ -12,15 +12,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class BOA(Optimizer):
@@ -39,15 +36,11 @@ class BOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> BOA.")
-
         self.c = 0.01
         self.a = 0.1
         self.p = 0.8
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def c(self) -> float:
@@ -58,7 +51,9 @@ class BOA(Optimizer):
     @c.setter
     def c(self, c: float) -> None:
         if not isinstance(c, (float, int)):
-            raise e.TypeError("`c` must be a float or integer.")
+            raise TypeError("`c` must be a float or integer.")
+        if not math.isfinite(c) or c < 0:
+            raise ValueError("`c` must be finite and non-negative.")
         self._c = c
 
     @property
@@ -70,7 +65,9 @@ class BOA(Optimizer):
     @a.setter
     def a(self, a: float) -> None:
         if not isinstance(a, (float, int)):
-            raise e.TypeError("`a` must be a float or integer.")
+            raise TypeError("`a` must be a float or integer.")
+        if not math.isfinite(a) or a < 0:
+            raise ValueError("`a` must be finite and non-negative.")
         self._a = a
 
     @property
@@ -82,10 +79,20 @@ class BOA(Optimizer):
     @p.setter
     def p(self, p: float) -> None:
         if not isinstance(p, (float, int)):
-            raise e.TypeError("`p` must be a float or integer.")
-        if not 0 <= p <= 1:
-            raise e.ValueError("`p` must be between 0 and 1.")
+            raise TypeError("`p` must be a float or integer.")
+        if not math.isfinite(p) or not 0 <= p <= 1:
+            raise ValueError("`p` must be finite and between 0 and 1.")
         self._p = p
+
+    def compile(self, population) -> None:
+        """Initialize the per-agent fragrance buffer.
+
+        Args:
+            population: Population that determines buffer shape, device, and dtype.
+
+        """
+
+        self.fragrance = torch.zeros_like(population.fitness)
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -101,17 +108,17 @@ class BOA(Optimizer):
 
         best = pop.best_position.unsqueeze(0)
 
-        fragrance = self.c * pop.fitness.abs() ** self.a
-        f = fragrance.view(n, 1, 1)
+        self.fragrance = self.c * pop.fitness.abs() ** self.a
+        fragrance = self.fragrance.view(n, 1, 1)
+        random = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        global_pos = pop.positions + (random.square() * best - pop.positions) * fragrance
 
-        r = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-        prob = torch.rand(n, device=device, dtype=pop.dtype)
-
-        global_pos = pop.positions + (r**2) * (best - pop.positions) * f
-
-        j = torch.randint(0, n, (n,), device=device)
-        k = torch.randint(0, n, (n,), device=device)
-        local_pos = pop.positions + (r**2) * (pop.positions[j] - pop.positions[k]) * f
-
-        use_global = (prob < self.p).view(n, 1, 1)
+        first = torch.randint(0, n, (n,), device=device)
+        if n > 1:
+            second = torch.randint(0, n - 1, (n,), device=device)
+            second += (second >= first).long()
+        else:
+            second = first
+        local_pos = pop.positions + (random.square() * pop.positions[first] - pop.positions[second]) * fragrance
+        use_global = (random.squeeze(-1).squeeze(-1) < self.p).view(n, 1, 1)
         pop.positions = torch.where(use_global, global_pos, local_pos)

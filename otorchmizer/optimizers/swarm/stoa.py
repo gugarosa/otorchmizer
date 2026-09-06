@@ -5,32 +5,23 @@
 
 References:
     G. Dhiman and A. Kaur.
-    STOA: A bio-inspired based optimization algorithm for industrial
-    engineering problems.
+    STOA: A bio-inspired based optimization algorithm for industrial engineering problems.
     Engineering Applications of Artificial Intelligence (2019).
 
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class STOA(Optimizer):
-    """Sooty Tern Optimization Algorithm.
-
-    Notes:
-        Collision avoidance, convergence, and attack phases.
-
-    """
+    """Sooty Tern Optimization Algorithm."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -40,13 +31,11 @@ class STOA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> STOA.")
-
         self.Cf = 2.0
+        self.u = 1.0
+        self.v = 1.0
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def Cf(self) -> float:
@@ -56,12 +45,38 @@ class STOA(Optimizer):
 
     @Cf.setter
     def Cf(self, Cf: float) -> None:
-        if not isinstance(Cf, (float, int)):
-            raise e.TypeError("`Cf` must be a float or integer.")
-        self._Cf = Cf
+        self._Cf = self._validate_nonnegative("Cf", Cf)
+
+    @property
+    def u(self) -> float:
+        """Return the spiral-radius scale."""
+
+        return self._u
+
+    @u.setter
+    def u(self, u: float) -> None:
+        self._u = self._validate_nonnegative("u", u)
+
+    @property
+    def v(self) -> float:
+        """Return the spiral-growth coefficient."""
+
+        return self._v
+
+    @v.setter
+    def v(self, v: float) -> None:
+        self._v = self._validate_nonnegative("v", v)
+
+    @staticmethod
+    def _validate_nonnegative(name: str, value: float) -> float:
+        if not isinstance(value, (float, int)):
+            raise TypeError(f"`{name}` must be a float or integer.")
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"`{name}` must be finite and non-negative.")
+        return value
 
     def update(self, ctx: UpdateContext) -> None:
-        """Advance the population by one optimization step.
+        """Advance the population by one migration and spiral-attack step.
 
         Args:
             ctx: Population, objective function, and iteration state.
@@ -69,24 +84,30 @@ class STOA(Optimizer):
         """
 
         pop = ctx.space.population
-        device = pop.device
-        n = pop.n_agents
-        best = pop.best_position.unsqueeze(0)
+        progress = ctx.iteration / max(ctx.n_iterations, 1)
+        avoidance = self.Cf * (1 - progress)
+        collision = avoidance * pop.positions
+        convergence = (
+            0.5
+            * torch.rand(
+                pop.n_agents,
+                1,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
+            )
+            * (pop.best_position.unsqueeze(0) - pop.positions)
+        )
+        distance = collision + convergence
 
-        t = ctx.iteration / max(ctx.n_iterations, 1)
-
-        Sa = self.Cf - t * self.Cf
-
-        Cb = 0.5 * torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-        diff = Sa * (best - torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * pop.positions)
-
-        M = Cb * diff
-
-        k = torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * 2 * torch.pi
-        r_spiral = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-
-        x = r_spiral * torch.sin(k)
-        y = r_spiral * torch.cos(k)
-        z = r_spiral * k
-
-        pop.positions = M * (x + y + z) + best
+        k = torch.rand(
+            pop.n_agents,
+            1,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        ) * (2 * torch.pi)
+        radius = self.u * torch.exp(k * self.v)
+        angle = torch.rand_like(k) * k
+        spiral = radius * (torch.sin(angle) + torch.cos(angle) + angle)
+        pop.positions = pop.best_position.unsqueeze(0) + distance * spiral

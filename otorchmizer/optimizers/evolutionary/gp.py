@@ -11,22 +11,19 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.math.general as g
 import otorchmizer.math.random as r
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.node import Node
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.core.population import Population
 from otorchmizer.core.space import Space
 from otorchmizer.spaces.tree import TreeSpace
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 def _replace_subtree(tree: Node, position: int, replacement: Node) -> Node:
@@ -38,7 +35,7 @@ def _replace_subtree(tree: Node, position: int, replacement: Node) -> Node:
     target = tree.pre_order[position]
     parent = target.parent
     if parent is None:
-        raise e.ValueError("`position` should identify a linked subtree.")
+        raise ValueError("`position` should identify a linked subtree.")
 
     if parent.left is target:
         parent.left = replacement
@@ -47,7 +44,7 @@ def _replace_subtree(tree: Node, position: int, replacement: Node) -> Node:
         parent.right = replacement
         replacement.flag = False
     else:
-        raise e.ValueError("`target.parent` should reference the target node.")
+        raise ValueError("`target.parent` should reference the target node.")
 
     replacement.parent = parent
     target.parent = None
@@ -74,8 +71,6 @@ class GP(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> GP.")
-
         self.p_reproduction = 0.25
         self.p_mutation = 0.1
         self.p_crossover = 0.1
@@ -83,8 +78,6 @@ class GP(Optimizer):
         self._space: TreeSpace | None = None
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def p_reproduction(self) -> float:
@@ -94,10 +87,10 @@ class GP(Optimizer):
 
     @p_reproduction.setter
     def p_reproduction(self, p_reproduction: float) -> None:
-        if isinstance(p_reproduction, bool) or not isinstance(p_reproduction, (float, int)):
-            raise e.TypeError("`p_reproduction` should be a float or integer.")
+        if isinstance(p_reproduction, bool) or not isinstance(p_reproduction, Real):
+            raise TypeError("`p_reproduction` should be a float or integer.")
         if not 0 <= p_reproduction <= 1:
-            raise e.ValueError("`p_reproduction` should be between 0 and 1.")
+            raise ValueError("`p_reproduction` should be between 0 and 1.")
         self._p_reproduction = float(p_reproduction)
 
     @property
@@ -108,10 +101,10 @@ class GP(Optimizer):
 
     @p_mutation.setter
     def p_mutation(self, p_mutation: float) -> None:
-        if isinstance(p_mutation, bool) or not isinstance(p_mutation, (float, int)):
-            raise e.TypeError("`p_mutation` should be a float or integer.")
+        if isinstance(p_mutation, bool) or not isinstance(p_mutation, Real):
+            raise TypeError("`p_mutation` should be a float or integer.")
         if not 0 <= p_mutation <= 1:
-            raise e.ValueError("`p_mutation` should be between 0 and 1.")
+            raise ValueError("`p_mutation` should be between 0 and 1.")
         self._p_mutation = float(p_mutation)
 
     @property
@@ -122,24 +115,24 @@ class GP(Optimizer):
 
     @p_crossover.setter
     def p_crossover(self, p_crossover: float) -> None:
-        if isinstance(p_crossover, bool) or not isinstance(p_crossover, (float, int)):
-            raise e.TypeError("`p_crossover` should be a float or integer.")
+        if isinstance(p_crossover, bool) or not isinstance(p_crossover, Real):
+            raise TypeError("`p_crossover` should be a float or integer.")
         if not 0 <= p_crossover <= 1:
-            raise e.ValueError("`p_crossover` should be between 0 and 1.")
+            raise ValueError("`p_crossover` should be between 0 and 1.")
         self._p_crossover = float(p_crossover)
 
     @property
     def prunning_ratio(self) -> float:
-        """Return the legacy fraction of trailing operator points excluded from sampling."""
+        """Return the fraction of trailing operator points excluded from sampling."""
 
         return self._prunning_ratio
 
     @prunning_ratio.setter
     def prunning_ratio(self, prunning_ratio: float) -> None:
-        if isinstance(prunning_ratio, bool) or not isinstance(prunning_ratio, (float, int)):
-            raise e.TypeError("`prunning_ratio` should be a float or integer.")
+        if isinstance(prunning_ratio, bool) or not isinstance(prunning_ratio, Real):
+            raise TypeError("`prunning_ratio` should be a float or integer.")
         if not 0 <= prunning_ratio <= 1:
-            raise e.ValueError("`prunning_ratio` should be between 0 and 1.")
+            raise ValueError("`prunning_ratio` should be between 0 and 1.")
         self._prunning_ratio = float(prunning_ratio)
 
     def bind(self, space: Space) -> None:
@@ -158,7 +151,7 @@ class GP(Optimizer):
         """
 
         if not isinstance(space, TreeSpace):
-            raise e.TypeError("`space` should be a TreeSpace.")
+            raise TypeError("`space` should be a TreeSpace.")
 
         super().bind(space)
         self._space = space
@@ -171,15 +164,15 @@ class GP(Optimizer):
             space: TreeSpace expected to be bound to this optimizer.
 
         Raises:
-            BuildError: The optimizer has not been bound.
+            RuntimeError: The optimizer has not been bound.
             ValueError: A different space is supplied or its positions were externally changed.
 
         """
 
         if self._space is None:
-            raise e.BuildError("`optimizer` should be bound to a TreeSpace before validation.")
+            raise RuntimeError("`optimizer` should be bound to a TreeSpace before validation.")
         if space is not self._space:
-            raise e.ValueError("`space` should be the TreeSpace bound to the optimizer.")
+            raise ValueError("`space` should be the TreeSpace bound to the optimizer.")
 
         self._space.validate_positions()
 
@@ -210,7 +203,7 @@ class GP(Optimizer):
 
         n_agents = fitness.shape[0]
         if n_agents < 2:
-            raise e.ValueError("`fitness` should contain at least two individuals for crossover.")
+            raise ValueError("`fitness` should contain at least two individuals for crossover.")
 
         fathers = g.tournament_selection(fitness, n_pairs)
         candidates = torch.randint(0, n_agents - 1, (n_pairs, 2), device=fitness.device)
@@ -290,7 +283,7 @@ class GP(Optimizer):
 
         requested_crossover = int(n_agents * p_crossover)
         if requested_crossover > 0 and n_agents < 2:
-            raise e.ValueError("`space.n_agents` should be at least 2 when crossover selects offspring.")
+            raise ValueError("`space.n_agents` should be at least 2 when crossover selects offspring.")
         if requested_crossover % 2:
             requested_crossover += 1
         n_crossover = min(requested_crossover, len(targets) - cursor)
@@ -360,15 +353,15 @@ class GP(Optimizer):
             function: Objective function.
 
         Raises:
-            BuildError: The optimizer has not been bound to a TreeSpace.
+            RuntimeError: The optimizer has not been bound to a TreeSpace.
             ValueError: The supplied population is not owned by the bound TreeSpace.
 
         """
 
         if self._space is None:
-            raise e.BuildError("`optimizer` should be bound to a TreeSpace before evaluation.")
+            raise RuntimeError("`optimizer` should be bound to a TreeSpace before evaluation.")
         if population is not self._space.population:
-            raise e.ValueError("`population` should belong to the bound TreeSpace.")
+            raise ValueError("`population` should belong to the bound TreeSpace.")
 
         self.validate_space(self._space)
 
@@ -399,15 +392,15 @@ class GP(Optimizer):
             ctx: Current optimization state and objective.
 
         Raises:
-            BuildError: The optimizer has not been bound to a TreeSpace.
+            RuntimeError: The optimizer has not been bound to a TreeSpace.
             ValueError: The update context contains a different space.
 
         """
 
         if self._space is None:
-            raise e.BuildError("`optimizer` should be bound to a TreeSpace before updating.")
+            raise RuntimeError("`optimizer` should be bound to a TreeSpace before updating.")
         if ctx.space is not self._space:
-            raise e.ValueError("`ctx.space` should be the TreeSpace bound to the optimizer.")
+            raise ValueError("`ctx.space` should be the TreeSpace bound to the optimizer.")
 
         self.validate_space(self._space)
         self._evolve(

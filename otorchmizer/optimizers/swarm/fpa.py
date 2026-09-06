@@ -17,11 +17,7 @@ from typing import Any
 import torch
 
 import otorchmizer.math.distribution as d
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class FPA(Optimizer):
@@ -40,15 +36,11 @@ class FPA(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> FPA.")
-
         self.beta = 1.5
         self.eta = 0.2
         self.p = 0.8
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def beta(self) -> float:
@@ -59,7 +51,7 @@ class FPA(Optimizer):
     @beta.setter
     def beta(self, beta: float) -> None:
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
+            raise TypeError("`beta` must be a float or integer.")
         self._beta = beta
 
     @property
@@ -71,7 +63,7 @@ class FPA(Optimizer):
     @eta.setter
     def eta(self, eta: float) -> None:
         if not isinstance(eta, (float, int)):
-            raise e.TypeError("`eta` must be a float or integer.")
+            raise TypeError("`eta` must be a float or integer.")
         self._eta = eta
 
     @property
@@ -83,9 +75,9 @@ class FPA(Optimizer):
     @p.setter
     def p(self, p: float) -> None:
         if not isinstance(p, (float, int)):
-            raise e.TypeError("`p` must be a float or integer.")
+            raise TypeError("`p` must be a float or integer.")
         if not 0 <= p <= 1:
-            raise e.ValueError("`p` must be between 0 and 1.")
+            raise ValueError("`p` must be between 0 and 1.")
         self._p = p
 
     def update(self, ctx: UpdateContext) -> None:

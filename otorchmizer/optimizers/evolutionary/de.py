@@ -12,15 +12,12 @@ References:
 
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 def _sample_excluding(exclusions: torch.Tensor, n: int) -> torch.Tensor:
@@ -41,14 +38,10 @@ class DE(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> DE.")
-
         self.CR = 0.9
         self.F = 0.7
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def CR(self) -> float:
@@ -58,11 +51,11 @@ class DE(Optimizer):
 
     @CR.setter
     def CR(self, CR: float) -> None:
-        if not isinstance(CR, (float, int)):
-            raise e.TypeError("`CR` must be a float or integer.")
+        if not isinstance(CR, Real):
+            raise TypeError("`CR` must be a float or integer.")
         if not 0 <= CR <= 1:
-            raise e.ValueError("`CR` must be between 0 and 1.")
-        self._CR = CR
+            raise ValueError("`CR` must be between 0 and 1.")
+        self._CR = float(CR)
 
     @property
     def F(self) -> float:
@@ -72,11 +65,11 @@ class DE(Optimizer):
 
     @F.setter
     def F(self, F: float) -> None:
-        if not isinstance(F, (float, int)):
-            raise e.TypeError("`F` must be a float or integer.")
+        if not isinstance(F, Real):
+            raise TypeError("`F` must be a float or integer.")
         if not 0 <= F <= 2:
-            raise e.ValueError("`F` must be between 0 and 2.")
-        self._F = F
+            raise ValueError("`F` must be between 0 and 2.")
+        self._F = float(F)
 
     def compile(self, population) -> None:
         """Validate that the population can provide three distinct donors.
@@ -90,7 +83,7 @@ class DE(Optimizer):
         """
 
         if population.n_agents < 4:
-            raise e.ValueError("`population.n_agents` must be at least 4.")
+            raise ValueError("`population.n_agents` must be at least 4.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population through mutation, crossover, and selection.

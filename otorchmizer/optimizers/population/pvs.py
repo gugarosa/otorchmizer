@@ -16,9 +16,6 @@ from typing import Any
 import torch
 
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class PVS(Optimizer):
@@ -32,11 +29,7 @@ class PVS(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> PVS.")
-
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
         """Sort vehicles and update their positions through passing scenarios.
@@ -49,6 +42,9 @@ class PVS(Optimizer):
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
+        if n < 3:
+            raise ValueError("`population.n_agents` must be at least 3.")
+
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 

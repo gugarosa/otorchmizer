@@ -11,16 +11,14 @@ References:
 
 from __future__ import annotations
 
+import math
+from numbers import Real
 from typing import Any
 
 import torch
 
 import otorchmizer.math.general as g
-import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
-from otorchmizer.utils import logging
-
-logger = logging.get_logger(__name__)
 
 
 class RFO(Optimizer):
@@ -34,15 +32,11 @@ class RFO(Optimizer):
 
         """
 
-        logger.info("Overriding class: Optimizer -> RFO.")
-
-        self.phi = 3.14159
-        self.theta = 0.5
+        self.phi = torch.rand(1).item() * math.tau
+        self.theta = torch.rand(1).item()
         self.p_replacement = 0.05
 
         super().__init__(params)
-
-        logger.info("Class overrided.")
 
     @property
     def phi(self) -> float:
@@ -52,9 +46,11 @@ class RFO(Optimizer):
 
     @phi.setter
     def phi(self, phi: float) -> None:
-        if not isinstance(phi, (float, int)):
-            raise e.TypeError("`phi` must be a float or integer.")
-        self._phi = phi
+        if not isinstance(phi, Real):
+            raise TypeError("`phi` must be a float or integer.")
+        if not 0 <= phi <= math.tau:
+            raise ValueError("`phi` must be between 0 and 2π.")
+        self._phi = float(phi)
 
     @property
     def theta(self) -> float:
@@ -64,9 +60,11 @@ class RFO(Optimizer):
 
     @theta.setter
     def theta(self, theta: float) -> None:
-        if not isinstance(theta, (float, int)):
-            raise e.TypeError("`theta` must be a float or integer.")
-        self._theta = theta
+        if not isinstance(theta, Real):
+            raise TypeError("`theta` must be a float or integer.")
+        if not 0 <= theta <= 1:
+            raise ValueError("`theta` must be between 0 and 1.")
+        self._theta = float(theta)
 
     @property
     def p_replacement(self) -> float:
@@ -76,11 +74,11 @@ class RFO(Optimizer):
 
     @p_replacement.setter
     def p_replacement(self, p_replacement: float) -> None:
-        if not isinstance(p_replacement, (float, int)):
-            raise e.TypeError("`p_replacement` must be a float or integer.")
+        if not isinstance(p_replacement, Real):
+            raise TypeError("`p_replacement` must be a float or integer.")
         if not 0 <= p_replacement <= 1:
-            raise e.ValueError("`p_replacement` must be between 0 and 1.")
-        self._p_replacement = p_replacement
+            raise ValueError("`p_replacement` must be between 0 and 1.")
+        self._p_replacement = float(p_replacement)
 
     def compile(self, population) -> None:
         """Calculate the number of foxes replaced per update.
@@ -128,8 +126,18 @@ class RFO(Optimizer):
                 else:
                     radius = torch.tensor(self.theta, device=device, dtype=pop.dtype)
 
-                noise = alpha * radius * torch.randn_like(pop.positions[i])
-                candidate = (pop.positions[i] + noise).clamp(
+                angles = (
+                    torch.rand(
+                        pop.n_variables,
+                        device=device,
+                        dtype=pop.dtype,
+                    )
+                    * math.tau
+                )
+                sine = torch.sin(angles)
+                prior_sine = torch.cumsum(sine, dim=0) - sine
+                displacement = alpha * radius * (prior_sine + torch.cos(angles))
+                candidate = (pop.positions[i] + displacement.unsqueeze(-1)).clamp(
                     min=lb.squeeze(0),
                     max=ub.squeeze(0),
                 )
@@ -152,7 +160,8 @@ class RFO(Optimizer):
             for idx in worst_idx:
                 k = torch.rand(1, device=device, dtype=pop.dtype)
                 if k.item() >= 0.45:
-                    candidate = torch.rand_like(pop.positions[idx]) + center + diameter / 2
+                    random_position = pop.lb + torch.rand_like(pop.positions[idx]) * (pop.ub - pop.lb)
+                    candidate = random_position + center + diameter / 2
                 else:
                     candidate = k * center
                 replacement_positions.append(candidate)

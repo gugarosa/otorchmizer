@@ -9,7 +9,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import otorchmizer.utils.exception as e
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
 from otorchmizer.core.population import Population
@@ -226,7 +225,7 @@ def test_hgso_state_matches_cluster_and_population_cardinality():
     assert optimizer.constant.shape == (2,)
     assert optimizer.pressure.shape == (5,)
     assert optimizer.coeff.dtype == population.dtype
-    with pytest.raises(e.SizeError, match="must not exceed"):
+    with pytest.raises(ValueError, match="must not exceed"):
         HGSO({"n_clusters": 6}).compile(population)
 
 
@@ -261,7 +260,7 @@ def test_hgso_rejects_signed_fitness_before_state_mutation():
     coefficient = optimizer.coeff.clone()
     positions = population.positions.clone()
 
-    with pytest.raises(e.ValueError, match="finite non-negative values for HGSO"):
+    with pytest.raises(ValueError, match="finite non-negative values for HGSO"):
         optimizer.update(_context(population, Function(_sphere)))
 
     assert torch.equal(optimizer.coeff, coefficient)
@@ -307,7 +306,7 @@ def test_hgso_rejects_invalid_worst_gas_replacement_before_commit(monkeypatch):
     monkeypatch.setattr(torch, "rand_like", lambda tensor: torch.full_like(tensor, 0.25))
     function = Function(lambda position: position.sum())
 
-    with pytest.raises(e.ValueError, match="finite non-negative values for HGSO"):
+    with pytest.raises(ValueError, match="finite non-negative values for HGSO"):
         optimizer.update(_context(population, function))
 
     assert torch.equal(population.positions, positions)
@@ -421,7 +420,7 @@ def test_teo_rejects_signed_fitness_before_mutation(monkeypatch):
     environment = optimizer.environment.clone()
     monkeypatch.setattr(torch, "rand", _constant_rand(2 / 3, population.dtype))
 
-    with pytest.raises(e.ValueError, match="finite non-negative values for TEO"):
+    with pytest.raises(ValueError, match="finite non-negative values for TEO"):
         optimizer.update(_context(population, Function(lambda position: position.sum() - 1), iteration=5))
 
     assert torch.equal(population.positions, positions)
@@ -631,9 +630,9 @@ def test_wwo_scaled_ratio_rejects_unrepresentable_wavelength(dtype):
     minimum = torch.tensor(torch.finfo(dtype).tiny, dtype=dtype)
     half = torch.tensor(0.5, dtype=dtype)
 
-    with pytest.raises(e.ValueError, match="must be representable"):
+    with pytest.raises(ValueError, match="must be representable"):
         WWO._scaled_ratio(maximum, maximum, half)
-    with pytest.raises(e.ValueError, match="must be representable"):
+    with pytest.raises(ValueError, match="must be representable"):
         WWO._scaled_ratio(minimum, minimum, maximum)
 
 
@@ -648,7 +647,7 @@ def test_wwo_rejects_signed_fitness_before_mutation():
     positions = population.positions.clone()
     lengths = optimizer.length.clone()
 
-    with pytest.raises(e.ValueError, match="finite non-negative values for WWO"):
+    with pytest.raises(ValueError, match="finite non-negative values for WWO"):
         optimizer.update(_context(population, Function(lambda position: position.square().sum() - 1)))
 
     assert torch.equal(population.positions, positions)
@@ -667,15 +666,15 @@ def test_wwo_state_is_device_local_and_dtype_preserving():
 
 
 def test_science_migration_population_and_parameter_edges():
-    with pytest.raises(e.SizeError, match="at least 3 for CDO"):
+    with pytest.raises(ValueError, match="at least 3 for CDO"):
         CDO().compile(_population(n_agents=2))
-    with pytest.raises(e.ValueError, match="non-empty neutral field"):
+    with pytest.raises(ValueError, match="non-empty neutral field"):
         EFO({"positive_field": 0.75, "negative_field": 0.2}).compile(_population(n_agents=4))
-    with pytest.raises(e.SizeError, match="at least 2 for WEO"):
+    with pytest.raises(ValueError, match="at least 2 for WEO"):
         WEO().compile(_population(n_agents=1))
-    with pytest.raises(e.ValueError, match="`mu_k` must be positive"):
+    with pytest.raises(ValueError, match="`mu_k` must be positive"):
         TWO({"mu_k": 0})
-    with pytest.raises(e.TypeError, match="`c1` must be a bool"):
+    with pytest.raises(TypeError, match="`c1` must be a bool"):
         TEO({"c1": 1})
-    with pytest.raises(e.ValueError, match="`alpha` must be positive"):
+    with pytest.raises(ValueError, match="`alpha` must be positive"):
         WWO({"alpha": 0})
