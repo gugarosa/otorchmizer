@@ -5,18 +5,23 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
+import venv
 from pathlib import Path
 
 import pytest
 
-from tools import compare_implementations as comparison
-
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "tools" / "compare_implementations.py"
+_SPEC = importlib.util.spec_from_file_location("otorchmizer_comparison_tool", TOOL)
+assert _SPEC is not None and _SPEC.loader is not None
+comparison = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = comparison
+_SPEC.loader.exec_module(comparison)
 
 
 def _target_arguments(
@@ -54,6 +59,27 @@ def _target_arguments(
     for objective in objectives:
         arguments.extend(("--objective", objective))
     return arguments
+
+
+def test_configured_interpreter_preserves_virtual_environment(tmp_path):
+    environment = tmp_path / "isolated"
+    venv.EnvBuilder(with_pip=False, symlinks=os.name != "nt").create(environment)
+    executable = (
+        environment / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+    )
+    arguments = comparison._build_parser().parse_args(
+        ["inventory", "--runner", f"target={executable}", "--source", f"target={ROOT}"]
+    )
+    runner = comparison._build_runners(arguments)["target"]
+
+    completed = subprocess.run(
+        [str(runner.python), "-I", "-c", "import sys; print(sys.prefix)"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert Path(completed.stdout.strip()).resolve() == environment.resolve()
 
 
 def test_compare_cli_records_inventory_budget_and_invariants(tmp_path):

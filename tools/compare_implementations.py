@@ -224,7 +224,8 @@ def _build_runners(args: argparse.Namespace) -> dict[str, _Runner]:
 
     runners = {}
     for name, interpreter in interpreters.items():
-        python = Path(interpreter).expanduser().resolve()
+        # Resolving a virtualenv's interpreter symlink bypasses that environment
+        python = Path(interpreter).expanduser().absolute()
         source = Path(sources[name]).expanduser().resolve()
         device = devices.get(name, "cpu")
         dtype = dtypes.get(name, "float64")
