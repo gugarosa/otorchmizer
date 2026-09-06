@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Sailfish Optimizer.
 
 References:
@@ -5,11 +8,12 @@ References:
     The Sailfish Optimizer: A novel nature-inspired metaheuristic algorithm
     for solving constrained engineering optimization problems.
     Engineering Applications of Artificial Intelligence (2019).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -23,10 +27,19 @@ logger = logging.get_logger(__name__)
 class SFO(Optimizer):
     """Sailfish Optimizer.
 
-    Elite and sardine-based cooperative hunting.
+    Notes:
+        Elite and sardine-based cooperative hunting.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> SFO.")
 
         self.PP = 0.1
@@ -39,43 +52,69 @@ class SFO(Optimizer):
 
     @property
     def PP(self) -> float:
+        """Return the initial population proportion."""
+
         return self._PP
 
     @PP.setter
     def PP(self, PP: float) -> None:
         if not isinstance(PP, (float, int)):
-            raise e.TypeError("`PP` should be a float or integer")
+            raise e.TypeError("`PP` must be a float or integer.")
         self._PP = PP
 
     @property
     def A(self) -> float:
+        """Return the loudness parameter."""
+
         return self._A
 
     @A.setter
     def A(self, A: float) -> None:
         if not isinstance(A, (float, int)):
-            raise e.TypeError("`A` should be a float or integer")
+            raise e.TypeError("`A` must be a float or integer.")
         self._A = A
 
     @property
     def e(self) -> float:
+        """Return the attack-power decay."""
+
         return self._e
 
     @e.setter
     def e(self, e_val: float) -> None:
         if not isinstance(e_val, (float, int)):
-            raise e.TypeError("`e` should be a float or integer")
+            raise e.TypeError("`e` must be a float or integer.")
         self._e = e_val
 
     def compile(self, population) -> None:
-        # Sardines: bottom half of population
-        n = population.n_agents
-        self.n_sardines = n // 2
-        self.n_sailfish = n - self.n_sardines
-        self.sardine_positions = population.positions[self.n_sailfish:].clone()
-        self.sardine_fitness = population.fitness[self.n_sailfish:].clone()
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
+        if self.PP <= 0:
+            raise e.ValueError("`PP` must be positive.")
+
+        self.n_sailfish = population.n_agents
+        self.n_sardines = max(int(population.n_agents / self.PP), 1)
+        lb = population.lb.unsqueeze(0)
+        ub = population.ub.unsqueeze(0)
+        shape = (self.n_sardines, population.n_variables, population.n_dimensions)
+        self.sardine_positions = torch.rand(shape, device=population.device, dtype=population.dtype) * (ub - lb) + lb
+        self.sardine_fitness = torch.full(
+            (self.n_sardines,), torch.inf, device=population.device, dtype=population.dtype
+        )
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -84,22 +123,17 @@ class SFO(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        t = ctx.iteration / max(ctx.n_iterations, 1)
+        if torch.isinf(self.sardine_fitness).any():
+            self.sardine_fitness = fn(self.sardine_positions)
 
-        # Best sardine
         best_sardine_idx = self.sardine_fitness.argmin()
         best_sardine = self.sardine_positions[best_sardine_idx].unsqueeze(0)
 
-        # Power decrease coefficient
-        PD = 1 - (2 * ctx.iteration * self.e) / max(ctx.n_iterations, 1)
-        PD = max(PD, 0.0)
-
-        # Attack power
-        AP = self.A * (1 - 2 * t * self.e)
-
-        # Update sailfish positions
-        r = torch.rand(n, 1, 1, device=device)
-        new_positions = best - r * (best + best_sardine) / 2 - pop.positions
+        prey_density = 1 - self.n_sailfish / (self.n_sailfish + self.n_sardines)
+        lambda_random = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        position_random = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        lambda_i = 2 * lambda_random * prey_density - prey_density
+        new_positions = best_sardine - lambda_i * (position_random * (best - best_sardine) / 2 - pop.positions)
 
         new_positions = new_positions.clamp(min=lb, max=ub)
         new_fitness = fn(new_positions)
@@ -107,13 +141,31 @@ class SFO(Optimizer):
         improved = new_fitness < pop.fitness
         pop.positions[improved] = new_positions[improved]
         pop.fitness[improved] = new_fitness[improved]
+        pop.update_best()
+        best = pop.best_position.unsqueeze(0)
 
-        # Update sardine positions
-        n_s = self.sardine_positions.shape[0]
-        alpha = torch.rand(n_s, pop.n_variables, pop.n_dimensions, device=device)
-        mask = alpha < self.PP
-        rand_pos = torch.rand_like(self.sardine_positions) * (ub - lb) + lb
+        attack_power = abs(self.A * (1 - 2 * ctx.iteration * self.e))
+        if attack_power < 0.5:
+            n_selected = int(self.n_sardines * attack_power)
+            n_variables = int(pop.n_variables * attack_power)
+            selected_sardines = torch.randperm(self.n_sardines, device=device)[:n_selected]
+            selected_variables = torch.randperm(pop.n_variables, device=device)[:n_variables]
+            if n_selected and n_variables:
+                random_factor = torch.rand(n_selected, n_variables, pop.n_dimensions, device=device, dtype=pop.dtype)
+                current = self.sardine_positions[selected_sardines[:, None], selected_variables]
+                self.sardine_positions[selected_sardines[:, None], selected_variables] = random_factor * (
+                    best[:, selected_variables] - current + attack_power
+                )
+        else:
+            random_factor = torch.rand(self.n_sardines, 1, 1, device=device, dtype=pop.dtype)
+            self.sardine_positions = random_factor * (best - self.sardine_positions + attack_power)
 
-        self.sardine_positions = torch.where(mask, rand_pos, self.sardine_positions + r[:n_s] * (best - self.sardine_positions + AP))
         self.sardine_positions = self.sardine_positions.clamp(min=lb, max=ub)
         self.sardine_fitness = fn(self.sardine_positions)
+
+        all_positions = torch.cat((pop.positions, self.sardine_positions), dim=0)
+        all_fitness = torch.cat((pop.fitness, self.sardine_fitness), dim=0)
+        selected = torch.argsort(all_fitness)[:n]
+        pop.positions = all_positions[selected]
+        pop.fitness = all_fitness[selected]
+        pop.update_best()

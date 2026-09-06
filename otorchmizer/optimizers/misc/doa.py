@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Darcy Optimization Algorithm.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -22,10 +25,19 @@ logger = logging.get_logger(__name__)
 class DOA(Optimizer):
     """Darcy Optimization Algorithm.
 
-    Chaotic map-based flow dynamics.
+    Notes:
+        Uses chaotic-map values to model Darcy-inspired flow dynamics.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the DOA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> DOA.")
 
         self.r = 1.0
@@ -36,19 +48,40 @@ class DOA(Optimizer):
 
     @property
     def r(self) -> float:
+        """Return the chaos multiplier.
+
+        Returns:
+            float: Current chaos multiplier.
+
+        """
+
         return self._r
 
     @r.setter
     def r(self, r: float) -> None:
+        """Set the chaos multiplier.
+
+        Args:
+            r: New value for the chaos multiplier.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(r, (float, int)):
-            raise e.TypeError("`r` should be a float or integer")
+            raise e.TypeError("`r` must be a float or integer.")
         self._r = r
 
     def compile(self, population) -> None:
-        self.chaotic_map = torch.zeros(
-            population.n_agents, population.n_variables,
-            device=population.device,
-        )
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
+        self.chaotic_map = population.positions.new_zeros(population.n_agents, population.n_variables)
 
     def _calculate_chaotic_map(self, lb_val: float, ub_val: float, device: torch.device) -> torch.Tensor:
         r1 = torch.rand(1, device=device) * (ub_val - lb_val) + lb_val
@@ -56,6 +89,13 @@ class DOA(Optimizer):
         return c_map
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one DOA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents

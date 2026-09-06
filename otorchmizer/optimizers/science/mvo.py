@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Multi-Verse Optimizer.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -22,10 +25,19 @@ logger = logging.get_logger(__name__)
 class MVO(Optimizer):
     """Multi-Verse Optimizer.
 
-    White hole, wormhole, and black hole mechanisms.
+    Notes:
+        Combines white-hole, wormhole, and black-hole search mechanisms.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the MVO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> MVO.")
 
         self.WEP_min = 0.2
@@ -38,35 +50,93 @@ class MVO(Optimizer):
 
     @property
     def WEP_min(self) -> float:
+        """Return the minimum wormhole existence probability.
+
+        Returns:
+            float: Current minimum wormhole existence probability.
+
+        """
+
         return self._WEP_min
 
     @WEP_min.setter
     def WEP_min(self, WEP_min: float) -> None:
+        """Set the minimum wormhole existence probability.
+
+        Args:
+            WEP_min: New value for the minimum wormhole existence probability.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(WEP_min, (float, int)):
-            raise e.TypeError("`WEP_min` should be a float or integer")
+            raise e.TypeError("`WEP_min` must be a float or integer.")
         self._WEP_min = WEP_min
 
     @property
     def WEP_max(self) -> float:
+        """Return the maximum wormhole existence probability.
+
+        Returns:
+            float: Current maximum wormhole existence probability.
+
+        """
+
         return self._WEP_max
 
     @WEP_max.setter
     def WEP_max(self, WEP_max: float) -> None:
+        """Set the maximum wormhole existence probability.
+
+        Args:
+            WEP_max: New value for the maximum wormhole existence probability.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(WEP_max, (float, int)):
-            raise e.TypeError("`WEP_max` should be a float or integer")
+            raise e.TypeError("`WEP_max` must be a float or integer.")
         self._WEP_max = WEP_max
 
     @property
     def p(self) -> float:
+        """Return the exploitation accuracy.
+
+        Returns:
+            float: Current exploitation accuracy.
+
+        """
+
         return self._p
 
     @p.setter
     def p(self, p: float) -> None:
+        """Set the exploitation accuracy.
+
+        Args:
+            p: New value for the exploitation accuracy.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(p, (float, int)):
-            raise e.TypeError("`p` should be a float or integer")
+            raise e.TypeError("`p` must be a float or integer.")
         self._p = p
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one MVO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -81,7 +151,6 @@ class MVO(Optimizer):
         TDR = 1 - (t ** (1 / self.p)) / (T ** (1 / self.p))
 
         # Normalize fitness for roulette
-        sorted_idx = torch.argsort(pop.fitness)
         norm_fit = pop.fitness - pop.fitness.min()
         norm_fit = norm_fit / (norm_fit.sum() + 1e-10)
 
@@ -101,8 +170,12 @@ class MVO(Optimizer):
                     r3 = torch.rand(1, device=device).item()
                     width = ub.squeeze(0)[j] - lb.squeeze(0)[j]
                     if r3 < 0.5:
-                        new_positions[i, j] = best.squeeze(0)[j] + TDR * width * torch.rand(pop.n_dimensions, device=device)
+                        new_positions[i, j] = best.squeeze(0)[j] + TDR * width * torch.rand(
+                            pop.n_dimensions, device=device
+                        )
                     else:
-                        new_positions[i, j] = best.squeeze(0)[j] - TDR * width * torch.rand(pop.n_dimensions, device=device)
+                        new_positions[i, j] = best.squeeze(0)[j] - TDR * width * torch.rand(
+                            pop.n_dimensions, device=device
+                        )
 
         pop.positions = new_positions.clamp(min=lb, max=ub)

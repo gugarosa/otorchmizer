@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Evolutionary optimizers based on biological evolution."""
 
 from otorchmizer.optimizers.evolutionary.bsa import BSA
@@ -9,3 +12,20 @@ from otorchmizer.optimizers.evolutionary.ga import GA
 from otorchmizer.optimizers.evolutionary.hs import GHS, GOGHS, HS, IHS, NGHS, SGHS
 from otorchmizer.optimizers.evolutionary.iwo import IWO
 from otorchmizer.optimizers.evolutionary.rra import RRA
+
+__all__ = [
+    "BSA",
+    "DE",
+    "EP",
+    "ES",
+    "FOA",
+    "GA",
+    "GHS",
+    "GOGHS",
+    "HS",
+    "IHS",
+    "IWO",
+    "NGHS",
+    "RRA",
+    "SGHS",
+]

@@ -1,18 +1,21 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Grasshopper Optimization Algorithm.
 
 References:
     S. Saremi, S. Mirjalili, and A. Lewis.
     Grasshopper Optimisation Algorithm: Theory and application.
     Advances in Engineering Software (2017).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-import otorchmizer.math.general as g
 import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.utils import logging
@@ -23,10 +26,19 @@ logger = logging.get_logger(__name__)
 class GOA(Optimizer):
     """Grasshopper Optimization Algorithm.
 
-    Social interaction forces with pairwise distance computation.
+    Notes:
+        Social interaction forces with pairwise distance computation.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> GOA.")
 
         self.c_min = 0.00004
@@ -40,47 +52,61 @@ class GOA(Optimizer):
 
     @property
     def c_min(self) -> float:
+        """Return the minimum comfort coefficient."""
+
         return self._c_min
 
     @c_min.setter
     def c_min(self, c_min: float) -> None:
         if not isinstance(c_min, (float, int)):
-            raise e.TypeError("`c_min` should be a float or integer")
+            raise e.TypeError("`c_min` must be a float or integer.")
         self._c_min = c_min
 
     @property
     def c_max(self) -> float:
+        """Return the maximum comfort coefficient."""
+
         return self._c_max
 
     @c_max.setter
     def c_max(self, c_max: float) -> None:
         if not isinstance(c_max, (float, int)):
-            raise e.TypeError("`c_max` should be a float or integer")
+            raise e.TypeError("`c_max` must be a float or integer.")
         self._c_max = c_max
 
     @property
     def f(self) -> float:
+        """Return the attraction intensity."""
+
         return self._f
 
     @f.setter
     def f(self, f: float) -> None:
         if not isinstance(f, (float, int)):
-            raise e.TypeError("`f` should be a float or integer")
+            raise e.TypeError("`f` must be a float or integer.")
         self._f = f
 
     @property
-    def l(self) -> float:
+    def l(self) -> float:  # noqa: E743  # Public API name retained for compatibility
+        """Return the attraction length scale."""
+
         return self._l
 
     @l.setter
-    def l(self, l: float) -> None:
+    def l(self, l: float) -> None:  # noqa: E741, E743  # Public API name retained for compatibility
         if not isinstance(l, (float, int)):
-            raise e.TypeError("`l` should be a float or integer")
+            raise e.TypeError("`l` must be a float or integer.")
         self._l = l
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
-        device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
         lb = pop.lb.unsqueeze(0)
@@ -89,25 +115,17 @@ class GOA(Optimizer):
         t = ctx.iteration / max(ctx.n_iterations, 1)
         c = self.c_max - t * (self.c_max - self.c_min)
 
-        # Pairwise distances
-        flat = pop.positions.reshape(n, -1)  # (n, n_vars * n_dims)
-        dist_matrix = torch.cdist(flat, flat)  # (n, n)
-        dist_matrix = dist_matrix.clamp(min=1e-10)
+        flat = pop.positions.reshape(n, -1)
+        dist_matrix = torch.cdist(flat, flat).clamp(min=torch.finfo(pop.dtype).tiny)
+        social_distance = 2 + torch.fmod(dist_matrix, 2)
 
-        # Social interaction: s(r) = f * exp(-r/l) - exp(-r)
-        s = self.f * torch.exp(-dist_matrix / self.l) - torch.exp(-dist_matrix)
+        s = self.f * torch.exp(-social_distance / self.l) - torch.exp(-social_distance)
         s.fill_diagonal_(0)
 
-        # Direction vectors (normalized)
-        diff = pop.positions.unsqueeze(1) - pop.positions.unsqueeze(0)  # (n, n, v, d)
+        diff = pop.positions.unsqueeze(0) - pop.positions.unsqueeze(1)
         norm = dist_matrix.unsqueeze(-1).unsqueeze(-1)
         direction = diff / norm
 
-        # Social force
-        force = (c * s.unsqueeze(-1).unsqueeze(-1) * direction).sum(dim=1)
-
-        # Width for normalization
-        width = (ub - lb).clamp(min=1e-10)
-
-        pop.positions = c * force / width + best
+        force = (c * (ub - lb) / 2 * s.unsqueeze(-1).unsqueeze(-1) * direction).sum(dim=1)
+        pop.positions = c * force + best
         pop.positions = pop.positions.clamp(min=lb, max=ub)

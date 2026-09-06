@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Differential Evolution.
 
 References:
@@ -9,7 +12,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,13 +23,24 @@ from otorchmizer.utils import logging
 logger = logging.get_logger(__name__)
 
 
+def _sample_excluding(exclusions: torch.Tensor, n: int) -> torch.Tensor:
+    sample = torch.randint(0, n - exclusions.shape[1], (exclusions.shape[0],), device=exclusions.device)
+    for excluded in exclusions.sort(dim=1).values.unbind(dim=1):
+        sample += sample >= excluded
+    return sample
+
+
 class DE(Optimizer):
-    """Differential Evolution.
+    """Apply vectorized Differential Evolution mutation, crossover, and selection."""
 
-    Vectorized mutation, crossover, and selection.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> DE.")
 
         self.CR = 0.9
@@ -38,29 +52,54 @@ class DE(Optimizer):
 
     @property
     def CR(self) -> float:
+        """Return the crossover probability."""
+
         return self._CR
 
     @CR.setter
     def CR(self, CR: float) -> None:
         if not isinstance(CR, (float, int)):
-            raise e.TypeError("`CR` should be a float or integer")
+            raise e.TypeError("`CR` must be a float or integer.")
         if not 0 <= CR <= 1:
-            raise e.ValueError("`CR` should be between 0 and 1")
+            raise e.ValueError("`CR` must be between 0 and 1.")
         self._CR = CR
 
     @property
     def F(self) -> float:
+        """Return the differential mutation weight."""
+
         return self._F
 
     @F.setter
     def F(self, F: float) -> None:
         if not isinstance(F, (float, int)):
-            raise e.TypeError("`F` should be a float or integer")
+            raise e.TypeError("`F` must be a float or integer.")
         if not 0 <= F <= 2:
-            raise e.ValueError("`F` should be between 0 and 2")
+            raise e.ValueError("`F` must be between 0 and 2.")
         self._F = F
 
+    def compile(self, population) -> None:
+        """Validate that the population can provide three distinct donors.
+
+        Args:
+            population: Population whose size is validated.
+
+        Raises:
+            ValueError: The population contains fewer than four agents.
+
+        """
+
+        if population.n_agents < 4:
+            raise e.ValueError("`population.n_agents` must be at least 4.")
+
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population through mutation, crossover, and selection.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -68,17 +107,24 @@ class DE(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        # Select 3 random distinct agents per individual
-        idx_a = torch.randint(0, n, (n,), device=device)
-        idx_b = torch.randint(0, n, (n,), device=device)
-        idx_c = torch.randint(0, n, (n,), device=device)
+        targets = torch.arange(n, device=device)
+        idx_a = _sample_excluding(targets.unsqueeze(1), n)
+        idx_b = _sample_excluding(torch.stack((targets, idx_a), dim=1), n)
+        idx_c = _sample_excluding(torch.stack((targets, idx_a, idx_b), dim=1), n)
 
-        # Mutation: v = a + F * (b - c)
         mutant = pop.positions[idx_a] + self.F * (pop.positions[idx_b] - pop.positions[idx_c])
 
-        # Crossover
-        cr_mask = torch.rand(n, pop.n_variables, pop.n_dimensions, device=device) < self.CR
-        # Ensure at least one dimension from mutant
+        cr_mask = (
+            torch.rand(
+                n,
+                pop.n_variables,
+                pop.n_dimensions,
+                device=device,
+                dtype=pop.dtype,
+            )
+            < self.CR
+        )
+        # Force at least one mutant variable into each trial
         j_rand = torch.randint(0, pop.n_variables, (n,), device=device)
         for i in range(n):
             cr_mask[i, j_rand[i], :] = True
@@ -86,7 +132,6 @@ class DE(Optimizer):
         trial = torch.where(cr_mask, mutant, pop.positions)
         trial = trial.clamp(min=lb, max=ub)
 
-        # Selection
         trial_fitness = fn(trial)
         improved = trial_fitness < pop.fitness
         pop.positions[improved] = trial[improved]

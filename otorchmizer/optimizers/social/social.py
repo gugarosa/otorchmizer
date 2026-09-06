@@ -1,8 +1,11 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Social-based optimizers: BSO, CI, ISA, MVPA, QSA, SSD."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -18,7 +21,14 @@ logger = logging.get_logger(__name__)
 class BSO(Optimizer):
     """Brain Storm Optimization."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the BSO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.m = 5
         self.p_replacement_cluster = 0.2
         self.p_single_cluster = 0.8
@@ -28,6 +38,13 @@ class BSO(Optimizer):
         super().__init__(params)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one BSO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -56,7 +73,9 @@ class BSO(Optimizer):
         if torch.rand(1, device=device).item() < self.p_replacement_cluster:
             ci = torch.randint(0, self.m, (1,), device=device).item()
             if cluster_best[ci] >= 0:
-                pop.positions[cluster_best[ci]] = torch.rand(pop.n_variables, pop.n_dimensions, device=device) * (ub.squeeze(0) - lb.squeeze(0)) + lb.squeeze(0)
+                pop.positions[cluster_best[ci]] = torch.rand(pop.n_variables, pop.n_dimensions, device=device) * (
+                    ub.squeeze(0) - lb.squeeze(0)
+                ) + lb.squeeze(0)
 
         for i in range(n):
             new_pos = pop.positions[i].clone()
@@ -96,43 +115,74 @@ class BSO(Optimizer):
 class CI(Optimizer):
     """Cohort Intelligence."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the CI optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.r = 0.8
         self.t = 3
         super().__init__(params)
 
     def compile(self, population) -> None:
-        n = population.n_agents
-        device = population.device
-        lb = population.lb.unsqueeze(0)
-        ub = population.ub.unsqueeze(0)
-        self.lower = lb.expand(n, -1, -1).clone()
-        self.upper = ub.expand(n, -1, -1).clone()
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
+        self.lower = population.lb.unsqueeze(0).expand_as(population.positions).clone()
+        self.upper = population.ub.unsqueeze(0).expand_as(population.positions).clone()
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one CI step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
-        device = pop.device
         n = pop.n_agents
-        lb_g = pop.lb.unsqueeze(0)
-        ub_g = pop.ub.unsqueeze(0)
 
         # Weighted wheel selection
         fitness = pop.fitness.clone()
-        weights = 1.0 / (fitness + c.EPSILON)
+        if torch.isnan(fitness).any() or torch.isneginf(fitness).any():
+            raise e.ValueError("`population.fitness` must not contain NaN or negative infinity.")
+
+        scored = torch.isfinite(fitness)
+        if not scored.any():
+            raise e.ValueError("`population.fitness` must contain at least one finite value.")
+
+        weights = torch.zeros_like(fitness)
+        if (fitness[scored] > 0).all():
+            weights[scored] = fitness[scored].min() / fitness[scored]
+        else:
+            eps = torch.finfo(fitness.dtype).eps
+            scaled = fitness[scored] / fitness[scored].abs().max().clamp_min(eps)
+            shifted = scaled - scaled.min()
+            weights[scored] = (shifted + eps).reciprocal()
+
+        weights = weights / weights.max()
         weights = weights / weights.sum()
 
         for i in range(n):
             s = torch.multinomial(weights, 1).item()
 
-            self.lower[i] = pop.positions[s] - (self.upper[i] - self.lower[i]) * self.r / 2
-            self.upper[i] = pop.positions[s] + (self.upper[i] - self.lower[i]) * self.r / 2
-            self.lower[i] = self.lower[i].clamp(min=lb_g)
-            self.upper[i] = self.upper[i].clamp(max=ub_g)
+            width = (self.upper[i] - self.lower[i]) * self.r / 2
+            self.lower[i] = pop.positions[s] - width
+            self.upper[i] = pop.positions[s] + width
+            self.lower[i] = self.lower[i].clamp(min=pop.lb)
+            self.upper[i] = self.upper[i].clamp(max=pop.ub)
 
             for _ in range(self.t):
-                new_pos = torch.rand_like(pop.positions[i]) * (self.upper[i].squeeze(0) - self.lower[i].squeeze(0)) + self.lower[i].squeeze(0)
-                new_pos = new_pos.clamp(min=lb_g.squeeze(0), max=ub_g.squeeze(0))
+                new_pos = torch.rand_like(pop.positions[i]) * (self.upper[i] - self.lower[i]) + self.lower[i]
+                new_pos = new_pos.clamp(min=pop.lb, max=pop.ub)
                 new_fit = fn(new_pos.unsqueeze(0))[0]
                 if new_fit < pop.fitness[i]:
                     pop.positions[i] = new_pos
@@ -142,28 +192,60 @@ class CI(Optimizer):
 class ISA(Optimizer):
     """Interactive Search Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the ISA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.w = 0.7
         self.tau = 0.3
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         n = population.n_agents
+        if n < 2:
+            raise e.SizeError("`population.n_agents` must be at least 2 for ISA.")
+
         shape = (n, population.n_variables, population.n_dimensions)
-        device = population.device
-        self.local_position = torch.zeros(shape, device=device)
-        self.velocity = torch.zeros(shape, device=device)
+        self.local_position = population.positions.new_zeros(shape)
+        self.velocity = population.positions.new_zeros(shape)
+        self.local_fitness = population.fitness.new_full((n,), torch.inf)
 
     def evaluate(self, population, function) -> None:
-        population.fitness = function(population.positions)
-        for i in range(population.n_agents):
-            if population.fitness[i] < population.best_fitness:
-                self.local_position[i] = population.positions[i].clone()
+        """Evaluate a population and update optimizer-specific best state.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+            function: Objective function used to score the population.
+
+        """
+
+        fitness = function(population.positions)
+        improved = fitness < self.local_fitness
+        self.local_position[improved] = population.positions[improved]
+        self.local_fitness[improved] = fitness[improved]
+        population.fitness = fitness
         population.update_best()
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one ISA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
-        fn = ctx.function
         device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
@@ -211,14 +293,40 @@ class ISA(Optimizer):
 class MVPA(Optimizer):
     """Most Valuable Player Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the MVPA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.n_teams = 4
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
+        if self.n_teams < 2:
+            raise e.ValueError("`n_teams` must be at least 2.")
+        if population.n_agents < self.n_teams:
+            raise e.SizeError("`population.n_agents` must be at least `n_teams`.")
+
         self.n_p = population.n_agents // self.n_teams
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one MVPA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -258,7 +366,11 @@ class MVPA(Optimizer):
                 r2 = torch.rand(1, device=device)
                 r3 = torch.rand(1, 1, device=device)
 
-                new_pos = pop.positions[idx] + r1 * (franchise_i - pop.positions[idx]) + 2 * r1 * (best.squeeze(0) - pop.positions[idx])
+                new_pos = (
+                    pop.positions[idx]
+                    + r1 * (franchise_i - pop.positions[idx])
+                    + 2 * r1 * (best.squeeze(0) - pop.positions[idx])
+                )
 
                 Pr = 1 - fitness_i / (fitness_i + fitness_j + c.EPSILON)
                 if r2.item() < Pr:
@@ -276,10 +388,38 @@ class MVPA(Optimizer):
 class QSA(Optimizer):
     """Queuing Search Algorithm."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the QSA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         super().__init__(params)
 
+    def compile(self, population) -> None:
+        """Validate the population required by the three queue leaders.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        Raises:
+            SizeError: If fewer than three agents are available.
+
+        """
+
+        if population.n_agents < 3:
+            raise e.SizeError("`population.n_agents` must be at least 3 for QSA.")
+
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one QSA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -290,17 +430,17 @@ class QSA(Optimizer):
         T = max(ctx.n_iterations, 1)
 
         import math
+
         beta = math.exp(math.log(1 / (t + c.EPSILON)) * math.sqrt(t / T))
 
         sorted_idx = torch.argsort(pop.fitness)
         pop.positions = pop.positions[sorted_idx]
         pop.fitness = pop.fitness[sorted_idx]
 
-        A1, A2, A3 = pop.positions[0], pop.positions[1], pop.positions[min(2, n - 1)]
-
         for i in range(n):
             alpha = torch.rand(1, device=device) * 2 - 1
             from otorchmizer.math.random import generate_gamma_random_number
+
             E = generate_gamma_random_number(1.0, 0.5, (pop.n_variables, pop.n_dimensions), device)
             e = generate_gamma_random_number(1.0, 0.5, (1,), device)
 
@@ -320,26 +460,56 @@ class QSA(Optimizer):
 class SSD(Optimizer):
     """Social Ski Driver."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the SSD optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         self.c_val = 2.0
         self.decay = 0.99
         super().__init__(params)
 
     def compile(self, population) -> None:
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
+
         n = population.n_agents
         shape = (n, population.n_variables, population.n_dimensions)
-        device = population.device
-        self.local_position = torch.zeros(shape, device=device)
-        self.velocity = torch.rand(shape, device=device)
+        self.local_position = population.positions.new_zeros(shape)
+        self.velocity = torch.rand_like(population.positions)
+        self.local_fitness = population.fitness.new_full((n,), torch.inf)
 
     def evaluate(self, population, function) -> None:
-        population.fitness = function(population.positions)
-        for i in range(population.n_agents):
-            if population.fitness[i] < population.best_fitness:
-                self.local_position[i] = population.positions[i].clone()
+        """Evaluate a population and update optimizer-specific best state.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+            function: Objective function used to score the population.
+
+        """
+
+        fitness = function(population.positions)
+        improved = fitness < self.local_fitness
+        self.local_position[improved] = population.positions[improved]
+        self.local_fitness[improved] = fitness[improved]
+        population.fitness = fitness
         population.update_best()
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one SSD step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -362,9 +532,13 @@ class SSD(Optimizer):
 
             # Update velocity
             if r2.item() <= 0.5:
-                self.velocity[i] = self.c_val * torch.sin(r1) * (self.local_position[i] - pop.positions[i]) + torch.sin(r1) * (mean - pop.positions[i])
+                self.velocity[i] = self.c_val * torch.sin(r1) * (self.local_position[i] - pop.positions[i]) + torch.sin(
+                    r1
+                ) * (mean - pop.positions[i])
             else:
-                self.velocity[i] = self.c_val * torch.cos(r1) * (self.local_position[i] - pop.positions[i]) + torch.cos(r1) * (mean - pop.positions[i])
+                self.velocity[i] = self.c_val * torch.cos(r1) * (self.local_position[i] - pop.positions[i]) + torch.cos(
+                    r1
+                ) * (mean - pop.positions[i])
 
         pop.positions = pop.positions.clamp(min=lb, max=ub)
         self.c_val *= self.decay

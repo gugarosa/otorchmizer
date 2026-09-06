@@ -1,10 +1,12 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Tests for optimizer implementations: PSO, WOA, FA, GA, GS, HC."""
 
 import torch
 
 from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import UpdateContext
-from otorchmizer.core.population import Population
 from otorchmizer.optimizers.evolutionary.ga import GA
 from otorchmizer.optimizers.misc.gs import GS
 from otorchmizer.optimizers.misc.hc import HC
@@ -15,7 +17,7 @@ from otorchmizer.spaces.search import SearchSpace
 
 
 def _sphere(x):
-    return (x ** 2).sum()
+    return (x**2).sum()
 
 
 def _make_space(n_agents=20, n_variables=2, device="cpu"):
@@ -65,7 +67,6 @@ class TestPSO:
         assert space.population.positions.shape == (20, 2, 1)
 
     def test_convergence(self):
-        """PSO should find near-zero on a sphere function."""
 
         torch.manual_seed(42)
         fn = Function(_sphere)
@@ -169,7 +170,6 @@ class TestFA:
         opt.update(ctx)
 
     def test_pairwise_vectorization(self):
-        """FA should handle pairwise distances without loops."""
 
         fn = Function(_sphere)
         space = _make_space(n_agents=50)

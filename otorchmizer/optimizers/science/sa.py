@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Simulated Annealing.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -22,10 +25,19 @@ logger = logging.get_logger(__name__)
 class SA(Optimizer):
     """Simulated Annealing.
 
-    Temperature-controlled Metropolis-Hastings acceptance.
+    Notes:
+        Uses temperature-controlled Metropolis acceptance for candidate moves.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the SA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> SA.")
 
         self.T = 100.0
@@ -37,25 +49,66 @@ class SA(Optimizer):
 
     @property
     def T(self) -> float:
+        """Return the temperature.
+
+        Returns:
+            float: Current temperature.
+
+        """
+
         return self._T
 
     @T.setter
     def T(self, T: float) -> None:
+        """Set the temperature.
+
+        Args:
+            T: New value for the temperature.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(T, (float, int)):
-            raise e.TypeError("`T` should be a float or integer")
+            raise e.TypeError("`T` must be a float or integer.")
         self._T = T
 
     @property
     def beta(self) -> float:
+        """Return the beta coefficient.
+
+        Returns:
+            float: Current beta coefficient.
+
+        """
+
         return self._beta
 
     @beta.setter
     def beta(self, beta: float) -> None:
+        """Set the beta coefficient.
+
+        Args:
+            beta: New value for the beta coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` should be a float or integer")
+            raise e.TypeError("`beta` must be a float or integer.")
         self._beta = beta
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one SA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device

@@ -1,12 +1,16 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Particle Swarm Optimization family — fully vectorized with PyTorch.
 
 Includes: PSO, AIWPSO, RPSO, SAVPSO, VPSO
 All update rules operate on full population tensors (no per-agent loops).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -24,12 +28,20 @@ logger = logging.get_logger(__name__)
 class PSO(Optimizer):
     """Particle Swarm Optimization.
 
-    References:
-        J. Kennedy, R. C. Eberhart and Y. Shi.
-        Swarm intelligence. Artificial Intelligence (2001).
+    Notes:
+        Based on J. Kennedy, R. C. Eberhart, and Y. Shi, "Swarm Intelligence,"
+        Artificial Intelligence (2001).
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> PSO.")
 
         self.w = 0.7
@@ -42,73 +54,96 @@ class PSO(Optimizer):
 
     @property
     def w(self) -> float:
+        """Return the inertia weight."""
+
         return self._w
 
     @w.setter
     def w(self, w: float) -> None:
         if not isinstance(w, (float, int)):
-            raise e.TypeError("`w` should be a float or integer")
+            raise e.TypeError("`w` must be a float or integer.")
         if w < 0:
-            raise e.ValueError("`w` should be >= 0")
+            raise e.ValueError("`w` must be non-negative.")
         self._w = w
 
     @property
     def c1(self) -> float:
+        """Return the cognitive coefficient."""
+
         return self._c1
 
     @c1.setter
     def c1(self, c1: float) -> None:
         if not isinstance(c1, (float, int)):
-            raise e.TypeError("`c1` should be a float or integer")
+            raise e.TypeError("`c1` must be a float or integer.")
         if c1 < 0:
-            raise e.ValueError("`c1` should be >= 0")
+            raise e.ValueError("`c1` must be non-negative.")
         self._c1 = c1
 
     @property
     def c2(self) -> float:
+        """Return the social coefficient."""
+
         return self._c2
 
     @c2.setter
     def c2(self, c2: float) -> None:
         if not isinstance(c2, (float, int)):
-            raise e.TypeError("`c2` should be a float or integer")
+            raise e.TypeError("`c2` must be a float or integer.")
         if c2 < 0:
-            raise e.ValueError("`c2` should be >= 0")
+            raise e.ValueError("`c2` must be non-negative.")
         self._c2 = c2
 
     def compile(self, population: Population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         dev = population.device
-        dt = getattr(population, 'dtype', torch.float32)
+        dt = population.dtype
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
 
         self.local_position = torch.zeros(shape, device=dev, dtype=dt)
-        self.local_fitness = torch.full((population.n_agents,), c.FLOAT_MAX, device=dev, dtype=dt)
+        self.local_fitness = torch.full((population.n_agents,), torch.inf, device=dev, dtype=dt)
         self.velocity = torch.zeros(shape, device=dev, dtype=dt)
 
     def evaluate(self, population: Population, function: Function) -> None:
-        """Custom evaluate with local-best tracking — vectorized."""
+        """Evaluate the population and update stored best solutions.
+
+        Args:
+            population: Population to evaluate.
+            function: Objective function applied to the population.
+
+        """
 
         new_fitness = function(population.positions)
 
-        # Update local bests where improved (no loop)
         improved = new_fitness < self.local_fitness
         if improved.any():
             self.local_position[improved] = population.positions[improved].clone()
             self.local_fitness[improved] = new_fitness[improved].clone()
 
-        population.fitness = self.local_fitness.clone()
+        population.fitness = new_fitness
         population.update_best()
 
     def update(self, ctx: UpdateContext) -> None:
-        """Vectorized PSO velocity + position update."""
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
 
         pop = ctx.space.population
         shape = pop.positions.shape
 
-        r1 = torch.rand(shape, device=pop.device)
-        r2 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
+        r2 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
 
-        best = pop.best_position.unsqueeze(0)  # (1, n_vars, n_dims)
+        best = pop.best_position.unsqueeze(0)
 
         self.velocity = (
             self.w * self.velocity
@@ -122,13 +157,21 @@ class PSO(Optimizer):
 class AIWPSO(PSO):
     """Adaptive Inertia Weight PSO.
 
-    References:
-        A. Nickabadi, M. M. Ebadzadeh and R. Safabakhsh.
-        A novel particle swarm optimization algorithm with adaptive inertia weight.
+    Notes:
+        Based on A. Nickabadi, M. M. Ebadzadeh, and R. Safabakhsh,
+        "A Novel Particle Swarm Optimization Algorithm with Adaptive Inertia Weight,"
         Applied Soft Computing (2011).
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: PSO -> AIWPSO.")
 
         self.w_min = 0.1
@@ -140,47 +183,56 @@ class AIWPSO(PSO):
 
     @property
     def w_min(self) -> float:
+        """Return the minimum inertia weight."""
+
         return self._w_min
 
     @w_min.setter
     def w_min(self, w_min: float) -> None:
         if not isinstance(w_min, (float, int)):
-            raise e.TypeError("`w_min` should be a float or integer")
+            raise e.TypeError("`w_min` must be a float or integer.")
         if w_min < 0:
-            raise e.ValueError("`w_min` should be >= 0")
+            raise e.ValueError("`w_min` must be non-negative.")
         self._w_min = w_min
 
     @property
     def w_max(self) -> float:
+        """Return the maximum inertia weight."""
+
         return self._w_max
 
     @w_max.setter
     def w_max(self, w_max: float) -> None:
         if not isinstance(w_max, (float, int)):
-            raise e.TypeError("`w_max` should be a float or integer")
+            raise e.TypeError("`w_max` must be a float or integer.")
         if w_max < 0:
-            raise e.ValueError("`w_max` should be >= 0")
+            raise e.ValueError("`w_max` must be non-negative.")
         if w_max < self.w_min:
-            raise e.ValueError("`w_max` should be >= `w_min`")
+            raise e.ValueError("`w_max` must be greater than or equal to `w_min`.")
         self._w_max = w_max
 
     def _compute_success(self, population: Population) -> None:
-        """Updates inertia weight based on improvement ratio (eq. 16)."""
 
         improved = (population.fitness < self._prev_fitness).float()
         p = improved.mean()
         self.w = (self.w_max - self.w_min) * p.item() + self.w_min
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
 
         if ctx.iteration == 0:
             self._prev_fitness = pop.fitness.clone()
 
-        # Standard PSO update
         shape = pop.positions.shape
-        r1 = torch.rand(shape, device=pop.device)
-        r2 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
+        r2 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
 
         best = pop.best_position.unsqueeze(0)
 
@@ -199,32 +251,54 @@ class AIWPSO(PSO):
 class RPSO(PSO):
     """Relativistic PSO.
 
-    References:
-        M. Roder, G. H. de Rosa, L. A. Passos, A. L. D. Rossi and J. P. Papa.
-        Harnessing Particle Swarm Optimization Through Relativistic Velocity.
+    Notes:
+        Based on M. Roder, G. H. de Rosa, L. A. Passos, A. L. D. Rossi, and J. P. Papa,
+        "Harnessing Particle Swarm Optimization Through Relativistic Velocity,"
         IEEE Congress on Evolutionary Computation (2020).
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: PSO -> RPSO.")
         super().__init__(params)
         logger.info("Class overrided.")
 
     def compile(self, population: Population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         super().compile(population)
         dev = population.device
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.mass = r.generate_uniform_random_number(size=shape, device=dev)
+        self.mass = r.generate_uniform_random_number(size=shape, device=dev).to(dtype=population.dtype)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         shape = pop.positions.shape
 
         max_velocity = self.velocity.abs().max().clamp(min=c.EPSILON)
-        gamma = 1.0 / torch.sqrt(1.0 - (max_velocity ** 2 / c.LIGHT_SPEED ** 2))
+        gamma = 1.0 / torch.sqrt(1.0 - (max_velocity**2 / c.LIGHT_SPEED**2))
 
-        r1 = torch.rand(shape, device=pop.device)
-        r2 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
+        r2 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
 
         best = pop.best_position.unsqueeze(0)
 
@@ -240,29 +314,41 @@ class RPSO(PSO):
 class SAVPSO(PSO):
     """Self-Adaptive Velocity PSO.
 
-    References:
-        H. Lu and W. Chen.
-        Self-adaptive velocity particle swarm optimization for solving constrained optimization problems.
-        Journal of global optimization (2008).
+    Notes:
+        Based on H. Lu and W. Chen, "Self-Adaptive Velocity Particle Swarm Optimization
+        for Solving Constrained Optimization Problems," Journal of Global Optimization (2008).
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: PSO -> SAVPSO.")
         super().__init__(params)
         logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         shape = pop.positions.shape
         n = pop.n_agents
 
-        # Mean position across population
-        mean_pos = pop.positions.mean(dim=0, keepdim=True)  # (1, n_vars, n_dims)
+        mean_pos = pop.positions.mean(dim=0, keepdim=True)
 
-        # Random partner for each agent
         idx = torch.randint(0, n, (n,), device=pop.device)
 
-        r1 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
 
         self.velocity = (
             self.w * torch.abs(self.local_position[idx] - self.local_position) * torch.sign(self.velocity)
@@ -272,8 +358,7 @@ class SAVPSO(PSO):
 
         new_pos = pop.positions + self.velocity
 
-        # Boundary handling via mean position
-        r4 = torch.rand(shape, device=pop.device)
+        r4 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
         ub = pop.ub.unsqueeze(0)
         lb = pop.lb.unsqueeze(0)
         over = new_pos > ub
@@ -287,49 +372,67 @@ class SAVPSO(PSO):
 class VPSO(PSO):
     """Vertical PSO.
 
-    References:
-        W.-P. Yang. Vertical particle swarm optimization algorithm and its application.
+    Notes:
+        Based on W.-P. Yang, "Vertical Particle Swarm Optimization Algorithm and Its Application,"
         International Conference on Machine Learning and Cybernetics (2007).
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: PSO -> VPSO.")
         super().__init__(params)
         logger.info("Class overrided.")
 
     def compile(self, population: Population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         super().compile(population)
         dev = population.device
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.v_velocity = torch.ones(shape, device=dev)
+        self.v_velocity = torch.ones(shape, device=dev, dtype=population.dtype)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         shape = pop.positions.shape
 
-        r1 = torch.rand(shape, device=pop.device)
-        r2 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
+        r2 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
 
         best = pop.best_position.unsqueeze(0)
 
-        # Horizontal velocity (eq. 3)
         self.velocity = (
             self.w * self.velocity
             + self.c1 * r1 * (self.local_position - pop.positions)
             + self.c2 * r2 * (best - pop.positions)
         )
 
-        # Vertical velocity (eq. 4)
-        # Projection of v_velocity onto velocity direction
         vel_flat = self.velocity.reshape(pop.n_agents, -1)
         vv_flat = self.v_velocity.reshape(pop.n_agents, -1)
 
-        dot_vv = (vel_flat * vv_flat).sum(dim=1, keepdim=True)  # (n, 1)
-        dot_vv_norm = (vel_flat * vel_flat).sum(dim=1, keepdim=True) + c.EPSILON
+        dot_vv = (vel_flat * vv_flat).sum(dim=1, keepdim=True)
+        dot_vv_norm = (vel_flat * vel_flat).sum(dim=1, keepdim=True).clamp_min(torch.finfo(pop.dtype).tiny)
 
-        proj = (dot_vv / dot_vv_norm) * vel_flat  # (n, d)
+        proj = (dot_vv / dot_vv_norm) * vel_flat
         self.v_velocity = (vv_flat - proj).reshape(shape)
 
-        # Position update (eq. 5)
-        r1 = torch.rand(shape, device=pop.device)
+        r1 = torch.rand(shape, device=pop.device, dtype=pop.dtype)
         pop.positions = pop.positions + r1 * self.velocity + (1 - r1) * self.v_velocity

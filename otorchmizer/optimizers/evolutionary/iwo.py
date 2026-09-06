@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Invasive Weed Optimization.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,12 +23,16 @@ logger = logging.get_logger(__name__)
 
 
 class IWO(Optimizer):
-    """Invasive Weed Optimization.
+    """Apply seed production, spatial dispersal, and competitive exclusion."""
 
-    Seed production, spatial dispersal, and competitive exclusion.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> IWO.")
 
         self.min_seeds = 0
@@ -40,54 +47,68 @@ class IWO(Optimizer):
 
     @property
     def min_seeds(self) -> int:
+        """Return the minimum seeds produced by an agent."""
+
         return self._min_seeds
 
     @min_seeds.setter
     def min_seeds(self, min_seeds: int) -> None:
         if not isinstance(min_seeds, int):
-            raise e.TypeError("`min_seeds` should be an integer")
+            raise e.TypeError("`min_seeds` must be an integer.")
         if min_seeds < 0:
-            raise e.ValueError("`min_seeds` should be >= 0")
+            raise e.ValueError("`min_seeds` must be non-negative.")
         self._min_seeds = min_seeds
 
     @property
     def max_seeds(self) -> int:
+        """Return the maximum seeds produced by an agent."""
+
         return self._max_seeds
 
     @max_seeds.setter
     def max_seeds(self, max_seeds: int) -> None:
         if not isinstance(max_seeds, int):
-            raise e.TypeError("`max_seeds` should be an integer")
+            raise e.TypeError("`max_seeds` must be an integer.")
         self._max_seeds = max_seeds
 
     @property
     def init_sigma(self) -> float:
+        """Return the initial dispersal standard deviation."""
+
         return self._init_sigma
 
     @init_sigma.setter
     def init_sigma(self, init_sigma: float) -> None:
         if not isinstance(init_sigma, (float, int)):
-            raise e.TypeError("`init_sigma` should be a float or integer")
+            raise e.TypeError("`init_sigma` must be a float or integer.")
         if init_sigma < 0:
-            raise e.ValueError("`init_sigma` should be >= 0")
+            raise e.ValueError("`init_sigma` must be non-negative.")
         self._init_sigma = init_sigma
 
     @property
     def final_sigma(self) -> float:
+        """Return the final dispersal standard deviation."""
+
         return self._final_sigma
 
     @final_sigma.setter
     def final_sigma(self, final_sigma: float) -> None:
         if not isinstance(final_sigma, (float, int)):
-            raise e.TypeError("`final_sigma` should be a float or integer")
+            raise e.TypeError("`final_sigma` must be a float or integer.")
         if final_sigma < 0:
-            raise e.ValueError("`final_sigma` should be >= 0")
+            raise e.ValueError("`final_sigma` must be non-negative.")
         self._final_sigma = final_sigma
 
     def update(self, ctx: UpdateContext) -> None:
+        """Produce seeds and retain the best candidates.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
-        device = pop.device
         n = pop.n_agents
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
@@ -95,11 +116,9 @@ class IWO(Optimizer):
         t = ctx.iteration
         T = max(ctx.n_iterations, 1)
 
-        # Spatial dispersal
-        coef = ((T - t) ** self.e) / (T ** self.e)
+        coef = ((T - t) ** self.e) / (T**self.e)
         sigma = coef * (self.init_sigma - self.final_sigma) + self.final_sigma
 
-        # Sort by fitness
         sorted_idx = torch.argsort(pop.fitness)
         best_fit = pop.fitness[sorted_idx[0]]
         worst_fit = pop.fitness[sorted_idx[-1]]
@@ -121,7 +140,6 @@ class IWO(Optimizer):
             offspring = torch.cat(offspring_list, dim=0)
             offspring_fit = fn(offspring)
 
-            # Combine and select best n
             all_pos = torch.cat([pop.positions, offspring], dim=0)
             all_fit = torch.cat([pop.fitness, offspring_fit], dim=0)
             best_idx = torch.argsort(all_fit)[:n]

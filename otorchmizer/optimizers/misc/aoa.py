@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Arithmetic Optimization Algorithm.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -23,10 +26,19 @@ logger = logging.get_logger(__name__)
 class AOA(Optimizer):
     """Arithmetic Optimization Algorithm.
 
-    Division/multiplication (exploration) and subtraction/addition (exploitation).
+    Notes:
+        Uses division and multiplication for exploration, then subtraction and addition for exploitation.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the AOA optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> AOA.")
 
         self.a_min = 0.2
@@ -40,45 +52,120 @@ class AOA(Optimizer):
 
     @property
     def a_min(self) -> float:
+        """Return the minimum accelerated function.
+
+        Returns:
+            float: Current minimum accelerated function.
+
+        """
+
         return self._a_min
 
     @a_min.setter
     def a_min(self, a_min: float) -> None:
+        """Set the minimum accelerated function.
+
+        Args:
+            a_min: New value for the minimum accelerated function.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(a_min, (float, int)):
-            raise e.TypeError("`a_min` should be a float or integer")
+            raise e.TypeError("`a_min` must be a float or integer.")
         self._a_min = a_min
 
     @property
     def a_max(self) -> float:
+        """Return the maximum accelerated function.
+
+        Returns:
+            float: Current maximum accelerated function.
+
+        """
+
         return self._a_max
 
     @a_max.setter
     def a_max(self, a_max: float) -> None:
+        """Set the maximum accelerated function.
+
+        Args:
+            a_max: New value for the maximum accelerated function.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(a_max, (float, int)):
-            raise e.TypeError("`a_max` should be a float or integer")
+            raise e.TypeError("`a_max` must be a float or integer.")
         self._a_max = a_max
 
     @property
     def alpha(self) -> float:
+        """Return the alpha coefficient.
+
+        Returns:
+            float: Current alpha coefficient.
+
+        """
+
         return self._alpha
 
     @alpha.setter
     def alpha(self, alpha: float) -> None:
+        """Set the alpha coefficient.
+
+        Args:
+            alpha: New value for the alpha coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(alpha, (float, int)):
-            raise e.TypeError("`alpha` should be a float or integer")
+            raise e.TypeError("`alpha` must be a float or integer.")
         self._alpha = alpha
 
     @property
     def mu(self) -> float:
+        """Return the control coefficient.
+
+        Returns:
+            float: Current control coefficient.
+
+        """
+
         return self._mu
 
     @mu.setter
     def mu(self, mu: float) -> None:
+        """Set the control coefficient.
+
+        Args:
+            mu: New value for the control coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(mu, (float, int)):
-            raise e.TypeError("`mu` should be a float or integer")
+            raise e.TypeError("`mu` must be a float or integer.")
         self._mu = mu
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one AOA step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents

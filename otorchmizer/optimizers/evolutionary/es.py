@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Evolution Strategies.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,12 +23,16 @@ logger = logging.get_logger(__name__)
 
 
 class ES(Optimizer):
-    """Evolution Strategies (μ, λ)-ES.
+    """Apply self-adaptive mutation and combined parent-child selection."""
 
-    Self-adaptive mutation strategy with (μ+λ) selection.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> ES.")
 
         self.child_ratio = 0.5
@@ -36,30 +43,41 @@ class ES(Optimizer):
 
     @property
     def child_ratio(self) -> float:
+        """Return the fraction of agents used to produce children."""
+
         return self._child_ratio
 
     @child_ratio.setter
     def child_ratio(self, child_ratio: float) -> None:
         if not isinstance(child_ratio, (float, int)):
-            raise e.TypeError("`child_ratio` should be a float or integer")
+            raise e.TypeError("`child_ratio` must be a float or integer.")
         if not 0 <= child_ratio <= 1:
-            raise e.ValueError("`child_ratio` should be between 0 and 1")
+            raise e.ValueError("`child_ratio` must be between 0 and 1.")
         self._child_ratio = child_ratio
 
     def compile(self, population) -> None:
+        """Initialize child count and mutation strategies.
+
+        Args:
+            population: Population that defines state shape, bounds, and device.
+
+        """
+
         n = population.n_agents
         self.n_children = max(int(n * self.child_ratio), 1)
         shape = (n, population.n_variables, population.n_dimensions)
         lb = population.lb.unsqueeze(0)
         ub = population.ub.unsqueeze(0)
-        self.strategy = torch.zeros(shape, device=population.device)
-        # Initialize strategy for first n_children parents
-        self.strategy[:self.n_children] = 0.05 * torch.rand(
-            self.n_children, population.n_variables, population.n_dimensions,
-            device=population.device
-        ) * (ub - lb)
+        self.strategy = 0.05 * torch.rand(shape, device=population.device, dtype=population.dtype) * (ub - lb)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Produce children and retain the best combined candidates.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -69,21 +87,30 @@ class ES(Optimizer):
 
         nc = self.n_children
 
-        # Self-adaptive strategy update
         tau = 1.0 / (2.0 * pop.n_variables) ** 0.5
-        tau_p = 1.0 / (2.0 * (pop.n_variables ** 0.5)) ** 0.5
+        tau_p = 1.0 / (2.0 * (pop.n_variables**0.5)) ** 0.5
 
         new_strategy = self.strategy[:nc].clone()
-        r1 = torch.randn(nc, 1, 1, device=device)
-        r2 = torch.randn(nc, pop.n_variables, pop.n_dimensions, device=device)
+        r1 = torch.randn(nc, 1, 1, device=device, dtype=pop.dtype)
+        r2 = torch.randn(
+            nc,
+            pop.n_variables,
+            pop.n_dimensions,
+            device=device,
+            dtype=pop.dtype,
+        )
         new_strategy = new_strategy * torch.exp(tau_p * r1 + tau * r2)
 
-        # Mutate parents to create children
-        children = pop.positions[:nc] + new_strategy * torch.randn(nc, pop.n_variables, pop.n_dimensions, device=device)
+        children = pop.positions[:nc] + new_strategy * torch.randn(
+            nc,
+            pop.n_variables,
+            pop.n_dimensions,
+            device=device,
+            dtype=pop.dtype,
+        )
         children = children.clamp(min=lb, max=ub)
         children_fitness = fn(children)
 
-        # Combine and select best n
         all_pos = torch.cat([pop.positions, children], dim=0)
         all_fit = torch.cat([pop.fitness, children_fitness], dim=0)
         all_strategy = torch.cat([self.strategy, new_strategy], dim=0)

@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Black Hole optimizer.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -21,15 +24,31 @@ logger = logging.get_logger(__name__)
 class BH(Optimizer):
     """Black Hole optimizer.
 
-    Stars attracted toward best solution with event horizon reset.
+    Notes:
+        Attracts stars toward the best solution and resets candidates inside the event horizon.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the BH optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> BH.")
         super().__init__(params)
         logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one BH step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -57,5 +76,7 @@ class BH(Optimizer):
         inside = dist < radius
         if inside.any():
             n_inside = inside.sum().item()
-            pop.positions[inside] = torch.rand(n_inside, pop.n_variables, pop.n_dimensions, device=device) * (ub - lb) + lb
+            pop.positions[inside] = (
+                torch.rand(n_inside, pop.n_variables, pop.n_dimensions, device=device) * (ub - lb) + lb
+            )
             pop.fitness[inside] = fn(pop.positions[inside])

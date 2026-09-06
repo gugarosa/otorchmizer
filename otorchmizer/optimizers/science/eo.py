@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Equilibrium Optimizer.
 
 References:
@@ -8,11 +11,10 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.utils import logging
@@ -23,10 +25,19 @@ logger = logging.get_logger(__name__)
 class EO(Optimizer):
     """Equilibrium Optimizer.
 
-    Concentration-based update with generation control.
+    Notes:
+        Applies concentration-based movement with generation-rate control.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the EO optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> EO.")
 
         self.a1 = 2.0
@@ -40,46 +51,137 @@ class EO(Optimizer):
 
     @property
     def a1(self) -> float:
+        """Return the exploration coefficient.
+
+        Returns:
+            float: Current exploration coefficient.
+
+        """
+
         return self._a1
 
     @a1.setter
     def a1(self, a1: float) -> None:
+        """Set the exploration coefficient.
+
+        Args:
+            a1: New value for the exploration coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(a1, (float, int)):
-            raise e.TypeError("`a1` should be a float or integer")
+            raise e.TypeError("`a1` must be a float or integer.")
         self._a1 = a1
 
     @property
     def a2(self) -> float:
+        """Return the exploitation coefficient.
+
+        Returns:
+            float: Current exploitation coefficient.
+
+        """
+
         return self._a2
 
     @a2.setter
     def a2(self, a2: float) -> None:
+        """Set the exploitation coefficient.
+
+        Args:
+            a2: New value for the exploitation coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(a2, (float, int)):
-            raise e.TypeError("`a2` should be a float or integer")
+            raise e.TypeError("`a2` must be a float or integer.")
         self._a2 = a2
 
     @property
     def GP(self) -> float:
+        """Return the generation probability.
+
+        Returns:
+            float: Current generation probability.
+
+        """
+
         return self._GP
 
     @GP.setter
     def GP(self, GP: float) -> None:
+        """Set the generation probability.
+
+        Args:
+            GP: New value for the generation probability.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+            ValueError: If the supplied value is outside its valid range.
+
+        """
+
         if not isinstance(GP, (float, int)):
-            raise e.TypeError("`GP` should be a float or integer")
+            raise e.TypeError("`GP` must be a float or integer.")
         if not 0 <= GP <= 1:
-            raise e.ValueError("`GP` should be between 0 and 1")
+            raise e.ValueError("`GP` must be between 0 and 1.")
         self._GP = GP
 
+    @property
+    def V(self) -> float:
+        """Return the volume coefficient.
+
+        Returns:
+            float: Current volume coefficient.
+
+        """
+
+        return self._V
+
+    @V.setter
+    def V(self, V: float) -> None:
+        """Set the volume coefficient.
+
+        Args:
+            V: New value for the volume coefficient.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+            ValueError: If the supplied value is outside its valid range.
+
+        """
+
+        if not isinstance(V, (float, int)):
+            raise e.TypeError("`V` must be a float or integer.")
+        if V <= 0:
+            raise e.ValueError("`V` must be positive.")
+        self._V = V
+
     def compile(self, population) -> None:
-        # Maintain top-4 equilibrium candidates
+        """Initialize optimizer state for a population.
+
+        Args:
+            population: Population whose tensors define the optimizer state.
+
+        """
         shape = (population.n_variables, population.n_dimensions)
-        device = population.device
-        self.C = [
-            torch.zeros(shape, device=device) for _ in range(4)
-        ]
-        self.C_fit = [torch.tensor(c.FLOAT_MAX, device=device) for _ in range(4)]
+        self.C = [population.positions.new_zeros(shape) for _ in range(4)]
+        self.C_fit = [population.fitness.new_full((), torch.inf) for _ in range(4)]
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one EO step.
+
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -110,7 +212,7 @@ class EO(Optimizer):
 
         for i in range(n):
             # Random equilibrium from pool
-            idx = torch.randint(0, 5, (1,)).item()
+            idx = torch.randint(0, 5, (1,), device=device).item()
             C_eq = C_pool[idx]
 
             r = torch.rand_like(pop.positions[i])
@@ -121,11 +223,9 @@ class EO(Optimizer):
 
             # Generation probability
             r_GP = torch.rand(1, device=device)
-            GCP = 0.5 * r_GP if r_GP >= self.GP else torch.tensor(0.0, device=device)
+            GCP = 0.5 * r_GP if r_GP >= self.GP else pop.positions.new_zeros(())
 
-            r1 = torch.rand_like(pop.positions[i])
-            r2 = torch.rand_like(pop.positions[i])
-            G = GCP * (C_eq - lam * pop.positions[i])
+            G = GCP * (C_eq - lam * pop.positions[i]) * F
 
             pop.positions[i] = C_eq + (pop.positions[i] - C_eq) * F + (G / (lam * self.V + 1e-10)) * (1 - F)
 

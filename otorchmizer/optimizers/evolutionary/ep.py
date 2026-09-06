@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Evolutionary Programming.
 
 References:
@@ -8,7 +11,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -20,12 +23,16 @@ logger = logging.get_logger(__name__)
 
 
 class EP(Optimizer):
-    """Evolutionary Programming.
+    """Apply self-adaptive mutation and tournament selection with Evolutionary Programming."""
 
-    Mutation with self-adaptive strategy and tournament selection.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> EP.")
 
         self.bout_size = 0.1
@@ -37,35 +44,53 @@ class EP(Optimizer):
 
     @property
     def bout_size(self) -> float:
+        """Return the tournament bout ratio."""
+
         return self._bout_size
 
     @bout_size.setter
     def bout_size(self, bout_size: float) -> None:
         if not isinstance(bout_size, (float, int)):
-            raise e.TypeError("`bout_size` should be a float or integer")
+            raise e.TypeError("`bout_size` must be a float or integer.")
         if not 0 <= bout_size <= 1:
-            raise e.ValueError("`bout_size` should be between 0 and 1")
+            raise e.ValueError("`bout_size` must be between 0 and 1.")
         self._bout_size = bout_size
 
     @property
     def clip_ratio(self) -> float:
+        """Return the strategy clipping ratio."""
+
         return self._clip_ratio
 
     @clip_ratio.setter
     def clip_ratio(self, clip_ratio: float) -> None:
         if not isinstance(clip_ratio, (float, int)):
-            raise e.TypeError("`clip_ratio` should be a float or integer")
+            raise e.TypeError("`clip_ratio` must be a float or integer.")
         if not 0 <= clip_ratio <= 1:
-            raise e.ValueError("`clip_ratio` should be between 0 and 1")
+            raise e.ValueError("`clip_ratio` must be between 0 and 1.")
         self._clip_ratio = clip_ratio
 
     def compile(self, population) -> None:
+        """Initialize one mutation strategy per agent.
+
+        Args:
+            population: Population that defines state shape, bounds, and device.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
         lb = population.lb.unsqueeze(0)
         ub = population.ub.unsqueeze(0)
-        self.strategy = 0.05 * torch.rand(shape, device=population.device) * (ub - lb)
+        self.strategy = 0.05 * torch.rand(shape, device=population.device, dtype=population.dtype) * (ub - lb)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Create children and select the next generation by tournament wins.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -73,29 +98,25 @@ class EP(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        # Mutate parents to create children
         children = pop.positions + self.strategy * torch.randn_like(pop.positions)
         children = children.clamp(min=lb, max=ub)
 
-        # Update strategy
         self.strategy = self.strategy + torch.randn_like(self.strategy) * torch.sqrt(self.strategy.abs() + 1e-10)
         self.strategy = self.strategy.clamp(min=lb, max=ub) * self.clip_ratio
 
         children_fitness = fn(children)
 
-        # Tournament selection on combined population
         all_pos = torch.cat([pop.positions, children], dim=0)
         all_fit = torch.cat([pop.fitness, children_fitness], dim=0)
         total = all_pos.shape[0]
 
         n_bouts = max(int(total * self.bout_size), 1)
-        wins = torch.zeros(total, device=device)
+        wins = torch.zeros(total, device=device, dtype=pop.dtype)
 
         for _ in range(n_bouts):
             opponents = torch.randint(0, total, (total,), device=device)
-            wins += (all_fit < all_fit[opponents]).float()
+            wins += (all_fit < all_fit[opponents]).to(pop.dtype)
 
-        # Select top n by wins
         _, selected = wins.topk(n, largest=True)
         pop.positions = all_pos[selected]
         pop.fitness = all_fit[selected]

@@ -1,14 +1,19 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Salp Swarm Algorithm.
 
 References:
     S. Mirjalili et al.
     Salp Swarm Algorithm: A bio-inspired optimizer for engineering design problems.
     Advances in Engineering Software (2017).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import math
+from typing import Any
 
 import torch
 
@@ -21,10 +26,19 @@ logger = logging.get_logger(__name__)
 class SSA(Optimizer):
     """Salp Swarm Algorithm.
 
-    Leader and follower phases fully vectorized.
+    Notes:
+        Uses leader and follower phases.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> SSA.")
 
         super().__init__(params)
@@ -32,8 +46,14 @@ class SSA(Optimizer):
         logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
-        device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
         lb = pop.lb.unsqueeze(0)
@@ -41,20 +61,13 @@ class SSA(Optimizer):
 
         t = ctx.iteration / max(ctx.n_iterations, 1)
 
-        # Decay coefficient
-        c1 = 2 * torch.exp(torch.tensor(-(4 * t) ** 2, device=device))
+        c1 = pop.positions.new_tensor(2 * math.exp(-((4 * t) ** 2)))
+        c2 = torch.rand_like(pop.positions[:1])
+        c3 = torch.rand_like(pop.positions[:1])
+        displacement = c1 * ((ub - lb) * c2 + lb)
+        pop.positions[:1] = torch.where(c3 < 0.5, best + displacement, best - displacement)
 
-        # --- Leader update (first half) ---
-        n_leaders = n // 2
-        c2 = torch.rand(n_leaders, pop.n_variables, pop.n_dimensions, device=device)
-        c3 = torch.rand(n_leaders, device=device)
-
-        use_plus = (c3 >= 0.5).view(n_leaders, 1, 1)
-        leader_pos = torch.where(use_plus, best + c1 * c2 * (ub - lb), best - c1 * c2 * (ub - lb))
-        pop.positions[:n_leaders] = leader_pos
-
-        # --- Follower update (second half) ---
-        for i in range(n_leaders, n):
+        for i in range(1, n):
             pop.positions[i] = 0.5 * (pop.positions[i] + pop.positions[i - 1])
 
         pop.positions = pop.positions.clamp(min=lb, max=ub)

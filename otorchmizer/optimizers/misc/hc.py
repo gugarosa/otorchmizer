@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Hill Climbing.
 
 References:
@@ -6,7 +9,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import otorchmizer.math.random as r
 import otorchmizer.utils.exception as e
@@ -19,11 +22,19 @@ logger = logging.get_logger(__name__)
 class HC(Optimizer):
     """Hill Climbing optimizer.
 
-    Each agent takes a random step (Gaussian noise added to position).
-    The outer evaluate() loop handles fitness comparison and best tracking.
+    Notes:
+        Perturbs each agent with Gaussian noise before the outer loop evaluates and tracks the best candidate.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the HC optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> HC.")
 
         self.r_mean = 0.0
@@ -35,30 +46,67 @@ class HC(Optimizer):
 
     @property
     def r_mean(self) -> float:
+        """Return the noise mean.
+
+        Returns:
+            float: Current noise mean.
+
+        """
+
         return self._r_mean
 
     @r_mean.setter
     def r_mean(self, r_mean: float) -> None:
+        """Set the noise mean.
+
+        Args:
+            r_mean: New value for the noise mean.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+
+        """
+
         if not isinstance(r_mean, (float, int)):
-            raise e.TypeError("`r_mean` should be a float or integer")
+            raise e.TypeError("`r_mean` must be a float or integer.")
         self._r_mean = r_mean
 
     @property
     def r_var(self) -> float:
+        """Return the noise variance.
+
+        Returns:
+            float: Current noise variance.
+
+        """
+
         return self._r_var
 
     @r_var.setter
     def r_var(self, r_var: float) -> None:
+        """Set the noise variance.
+
+        Args:
+            r_var: New value for the noise variance.
+
+        Raises:
+            TypeError: If the supplied value has an invalid type.
+            ValueError: If the supplied value is outside its valid range.
+
+        """
+
         if not isinstance(r_var, (float, int)):
-            raise e.TypeError("`r_var` should be a float or integer")
+            raise e.TypeError("`r_var` must be a float or integer.")
         if r_var < 0:
-            raise e.ValueError("`r_var` should be >= 0")
+            raise e.ValueError("`r_var` must be non-negative.")
         self._r_var = r_var
 
     def update(self, ctx: UpdateContext) -> None:
-        """Vectorized hill climbing: adds Gaussian noise to all agents (p. 252).
+        """Advance the population by one HC step.
 
-        The outer loop's evaluate() handles fitness comparison and best tracking.
+        Args:
+            ctx: Update context containing the population, objective, and iteration state.
+
         """
 
         pop = ctx.space.population

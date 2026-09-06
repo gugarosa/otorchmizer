@@ -1,18 +1,21 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Krill Herd.
 
 References:
     A. H. Gandomi and A. H. Alavi.
     Krill herd: a new bio-inspired optimization algorithm.
     Communications in Nonlinear Science and Numerical Simulation (2012).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-import otorchmizer.math.distribution as d
 import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
@@ -24,10 +27,19 @@ logger = logging.get_logger(__name__)
 class KH(Optimizer):
     """Krill Herd optimizer.
 
-    Induced motion, foraging activity, and physical diffusion.
+    Notes:
+        Induced motion, foraging activity, and physical diffusion.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> KH.")
 
         self.N_max = 0.01
@@ -47,50 +59,72 @@ class KH(Optimizer):
 
     @property
     def N_max(self) -> float:
+        """Return the maximum induced speed."""
+
         return self._N_max
 
     @N_max.setter
     def N_max(self, N_max: float) -> None:
         if not isinstance(N_max, (float, int)):
-            raise e.TypeError("`N_max` should be a float or integer")
+            raise e.TypeError("`N_max` must be a float or integer.")
         self._N_max = N_max
 
     @property
     def V_f(self) -> float:
+        """Return the foraging speed."""
+
         return self._V_f
 
     @V_f.setter
     def V_f(self, V_f: float) -> None:
         if not isinstance(V_f, (float, int)):
-            raise e.TypeError("`V_f` should be a float or integer")
+            raise e.TypeError("`V_f` must be a float or integer.")
         self._V_f = V_f
 
     @property
     def D_max(self) -> float:
+        """Return the maximum diffusion speed."""
+
         return self._D_max
 
     @D_max.setter
     def D_max(self, D_max: float) -> None:
         if not isinstance(D_max, (float, int)):
-            raise e.TypeError("`D_max` should be a float or integer")
+            raise e.TypeError("`D_max` must be a float or integer.")
         self._D_max = D_max
 
     @property
     def C_t(self) -> float:
+        """Return the position constant."""
+
         return self._C_t
 
     @C_t.setter
     def C_t(self, C_t: float) -> None:
         if not isinstance(C_t, (float, int)):
-            raise e.TypeError("`C_t` should be a float or integer")
+            raise e.TypeError("`C_t` must be a float or integer.")
         self._C_t = C_t
 
     def compile(self, population) -> None:
+        """Initialize persistent optimizer state.
+
+        Args:
+            population: Population that defines the state shape, device, and dtype.
+
+        """
+
         shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.induced_motion = torch.zeros(shape, device=population.device)
-        self.foraging_motion = torch.zeros(shape, device=population.device)
+        self.induced_motion = torch.zeros(shape, device=population.device, dtype=population.dtype)
+        self.foraging_motion = torch.zeros(shape, device=population.device, dtype=population.dtype)
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         device = pop.device
         n = pop.n_agents
@@ -100,36 +134,32 @@ class KH(Optimizer):
 
         t = ctx.iteration / max(ctx.n_iterations, 1)
 
-        # Normalize fitness
         worst_fit = pop.fitness.max()
         best_fit = pop.fitness.min()
-        K = (pop.fitness - best_fit) / (worst_fit - best_fit + c.EPSILON)  # (n,)
+        K = (pop.fitness - best_fit) / (worst_fit - best_fit + c.EPSILON)
 
-        # Pairwise distances
         flat = pop.positions.reshape(n, -1)
-        dist_matrix = torch.cdist(flat, flat)  # (n, n)
+        dist_matrix = torch.cdist(flat, flat)
 
-        # Select nn nearest neighbors per krill
         _, nn_idx = dist_matrix.topk(min(self.nn + 1, n), largest=False, dim=1)
-        nn_idx = nn_idx[:, 1:]  # exclude self
+        nn_idx = nn_idx[:, 1:]
 
-        # Induced motion
-        diff = pop.positions.unsqueeze(1) - pop.positions[nn_idx]  # (n, nn, v, d)
-        nn_dist = dist_matrix.gather(1, nn_idx).clamp(min=1e-10)  # (n, nn)
+        diff = pop.positions.unsqueeze(1) - pop.positions[nn_idx]
+        nn_dist = dist_matrix.gather(1, nn_idx).clamp(min=1e-10)
         K_diff = (K.unsqueeze(0).expand(n, -1).gather(1, nn_idx) - K.unsqueeze(1)) / (nn_dist + c.EPSILON)
         alpha_local = K_diff.unsqueeze(-1).unsqueeze(-1) * diff / nn_dist.unsqueeze(-1).unsqueeze(-1)
         alpha_local = alpha_local.sum(dim=1)
 
-        # Target (toward best)
         dist_to_best = torch.linalg.norm((pop.positions - best).reshape(n, -1), dim=1).clamp(min=1e-10)
-        K_best = (K - 0.0) / (dist_to_best + c.EPSILON)  # best has K=0
+        K_best = (K - 0.0) / (dist_to_best + c.EPSILON)
         alpha_target = K_best.view(n, 1, 1) * (best - pop.positions) / dist_to_best.view(n, 1, 1)
 
         alpha = alpha_local + alpha_target
         self.induced_motion = self.W_n * self.induced_motion + self.N_max * alpha
 
-        # Foraging motion
-        food_pos = (pop.positions / (pop.fitness.view(n, 1, 1) + c.EPSILON)).sum(dim=0) / (1.0 / (pop.fitness + c.EPSILON)).sum()
+        food_pos = (pop.positions / (pop.fitness.view(n, 1, 1) + c.EPSILON)).sum(dim=0) / (
+            1.0 / (pop.fitness + c.EPSILON)
+        ).sum()
         food_pos = food_pos.unsqueeze(0)
         dist_to_food = torch.linalg.norm((pop.positions - food_pos).reshape(n, -1), dim=1).clamp(min=1e-10)
         K_food = K / (dist_to_food + c.EPSILON)
@@ -140,15 +170,12 @@ class KH(Optimizer):
 
         self.foraging_motion = self.W_f * self.foraging_motion + self.V_f * beta
 
-        # Physical diffusion
         diffusion = self.D_max * (1 - t) * (torch.rand_like(pop.positions) * 2 - 1)
 
-        # Update position
         dt = self.C_t * ((ub - lb).sum() / pop.n_variables)
         pop.positions = pop.positions + dt * (self.induced_motion + self.foraging_motion + diffusion)
         pop.positions = pop.positions.clamp(min=lb, max=ub)
 
-        # Crossover and mutation
         Cr = self.Cr * (1 - t)
         cr_mask = torch.rand_like(pop.positions) < Cr
         rand_idx = torch.randint(0, n, (n,), device=device)

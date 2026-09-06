@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Science-based optimizers inspired by physical and chemical phenomena."""
 
 from otorchmizer.optimizers.science.aso import ASO
@@ -21,3 +24,25 @@ from otorchmizer.optimizers.science.science_extra import (
 )
 from otorchmizer.optimizers.science.wca import WCA
 from otorchmizer.optimizers.science.wdo import WDO
+
+__all__ = [
+    "AIG",
+    "ASO",
+    "BH",
+    "CDO",
+    "EFO",
+    "EO",
+    "ESA",
+    "GSA",
+    "HGSO",
+    "LSA",
+    "MOA",
+    "MVO",
+    "SA",
+    "SMA",
+    "TEO",
+    "TWO",
+    "WCA",
+    "WDO",
+    "WEO",
+]

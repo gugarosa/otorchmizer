@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Black Widow Optimization.
 
 References:
@@ -5,11 +8,12 @@ References:
     Black Widow Optimization Algorithm: A novel meta-heuristic approach
     for solving engineering optimization problems.
     Engineering Applications of Artificial Intelligence (2020).
+
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -23,10 +27,19 @@ logger = logging.get_logger(__name__)
 class BWO(Optimizer):
     """Black Widow Optimization.
 
-    Mating, cannibalism, and mutation phases.
+    Notes:
+        Mating, cannibalism, and mutation phases.
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
         logger.info("Overriding class: Optimizer -> BWO.")
 
         self.pp = 0.6
@@ -39,41 +52,54 @@ class BWO(Optimizer):
 
     @property
     def pp(self) -> float:
+        """Return the procreation rate."""
+
         return self._pp
 
     @pp.setter
     def pp(self, pp: float) -> None:
         if not isinstance(pp, (float, int)):
-            raise e.TypeError("`pp` should be a float or integer")
+            raise e.TypeError("`pp` must be a float or integer.")
         if not 0 <= pp <= 1:
-            raise e.ValueError("`pp` should be between 0 and 1")
+            raise e.ValueError("`pp` must be between 0 and 1.")
         self._pp = pp
 
     @property
     def cr(self) -> float:
+        """Return the cannibalism rate."""
+
         return self._cr
 
     @cr.setter
     def cr(self, cr: float) -> None:
         if not isinstance(cr, (float, int)):
-            raise e.TypeError("`cr` should be a float or integer")
+            raise e.TypeError("`cr` must be a float or integer.")
         if not 0 <= cr <= 1:
-            raise e.ValueError("`cr` should be between 0 and 1")
+            raise e.ValueError("`cr` must be between 0 and 1.")
         self._cr = cr
 
     @property
     def pm(self) -> float:
+        """Return the mutation rate."""
+
         return self._pm
 
     @pm.setter
     def pm(self, pm: float) -> None:
         if not isinstance(pm, (float, int)):
-            raise e.TypeError("`pm` should be a float or integer")
+            raise e.TypeError("`pm` must be a float or integer.")
         if not 0 <= pm <= 1:
-            raise e.ValueError("`pm` should be between 0 and 1")
+            raise e.ValueError("`pm` must be between 0 and 1.")
         self._pm = pm
 
     def update(self, ctx: UpdateContext) -> None:
+        """Advance the population by one optimization step.
+
+        Args:
+            ctx: Population, objective function, and iteration state.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
         device = pop.device
@@ -81,18 +107,16 @@ class BWO(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        # Procreation: select top pp fraction as parents
         sorted_idx = torch.argsort(pop.fitness)
         n_parents = max(int(n * self.pp), 2)
         if n_parents % 2 != 0:
             n_parents -= 1
 
         parent_idx = sorted_idx[:n_parents]
-        fathers = pop.positions[parent_idx[:n_parents // 2]]
-        mothers = pop.positions[parent_idx[n_parents // 2:]]
+        fathers = pop.positions[parent_idx[: n_parents // 2]]
+        mothers = pop.positions[parent_idx[n_parents // 2 :]]
 
-        # Crossover
-        alpha = torch.rand(fathers.shape[0], 1, 1, device=device)
+        alpha = torch.rand(fathers.shape[0], 1, 1, device=device, dtype=pop.dtype)
         child1 = alpha * fathers + (1 - alpha) * mothers
         child2 = alpha * mothers + (1 - alpha) * fathers
 
@@ -100,20 +124,17 @@ class BWO(Optimizer):
         offspring = offspring.clamp(min=lb, max=ub)
         offspring_fit = fn(offspring)
 
-        # Cannibalism: keep only top cr fraction of offspring
         n_survive = max(int(offspring.shape[0] * self.cr), 1)
         surv_idx = torch.argsort(offspring_fit)[:n_survive]
         survivors = offspring[surv_idx]
         surv_fit = offspring_fit[surv_idx]
 
-        # Mutation
         mutants = survivors.clone()
         mut_mask = torch.rand_like(mutants) < self.pm
-        mutants = mutants + mut_mask.float() * torch.randn_like(mutants)
+        mutants = mutants + mut_mask.to(dtype=mutants.dtype) * torch.randn_like(mutants)
         mutants = mutants.clamp(min=lb, max=ub)
         mut_fit = fn(mutants)
 
-        # Merge survivors + mutants + original, keep best n
         all_pos = torch.cat([pop.positions, survivors, mutants], dim=0)
         all_fit = torch.cat([pop.fitness, surv_fit, mut_fit], dim=0)
 

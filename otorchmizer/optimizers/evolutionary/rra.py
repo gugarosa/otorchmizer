@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 """Runner-Root Algorithm.
 
 References:
@@ -9,7 +12,7 @@ References:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -22,12 +25,16 @@ logger = logging.get_logger(__name__)
 
 
 class RRA(Optimizer):
-    """Runner-Root Algorithm.
+    """Apply runner and root movement with stall detection."""
 
-    Runner and root movement with stall detection.
-    """
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        Args:
+            params: Parameter overrides applied after the algorithm defaults.
+
+        """
+
         logger.info("Overriding class: Optimizer -> RRA.")
 
         self.d_runner = 2.0
@@ -41,79 +48,95 @@ class RRA(Optimizer):
 
     @property
     def d_runner(self) -> float:
+        """Return the runner movement scale."""
+
         return self._d_runner
 
     @d_runner.setter
     def d_runner(self, d_runner: float) -> None:
         if not isinstance(d_runner, (float, int)):
-            raise e.TypeError("`d_runner` should be a float or integer")
+            raise e.TypeError("`d_runner` must be a float or integer.")
         self._d_runner = d_runner
 
     @property
     def d_root(self) -> float:
+        """Return the root movement scale."""
+
         return self._d_root
 
     @d_root.setter
     def d_root(self, d_root: float) -> None:
         if not isinstance(d_root, (float, int)):
-            raise e.TypeError("`d_root` should be a float or integer")
+            raise e.TypeError("`d_root` must be a float or integer.")
         self._d_root = d_root
 
     @property
     def tol(self) -> float:
+        """Return the relative-improvement tolerance."""
+
         return self._tol
 
     @tol.setter
     def tol(self, tol: float) -> None:
         if not isinstance(tol, (float, int)):
-            raise e.TypeError("`tol` should be a float or integer")
+            raise e.TypeError("`tol` must be a float or integer.")
         self._tol = tol
 
     @property
     def max_stall(self) -> int:
+        """Return the maximum consecutive stalled updates."""
+
         return self._max_stall
 
     @max_stall.setter
     def max_stall(self, max_stall: int) -> None:
         if not isinstance(max_stall, int):
-            raise e.TypeError("`max_stall` should be an integer")
+            raise e.TypeError("`max_stall` must be an integer.")
         if max_stall <= 0:
-            raise e.ValueError("`max_stall` should be > 0")
+            raise e.ValueError("`max_stall` must be positive.")
         self._max_stall = max_stall
 
     def compile(self, population) -> None:
+        """Initialize stall tracking from the population best.
+
+        Args:
+            population: Population whose best fitness seeds the tracker.
+
+        """
+
         self.n_stall = 0
         self.last_best_fit = population.best_fitness.clone()
 
     def update(self, ctx: UpdateContext) -> None:
+        """Generate runner and root candidates and update stall tracking.
+
+        Args:
+            ctx: Current optimization state and objective.
+
+        """
+
         pop = ctx.space.population
         fn = ctx.function
-        device = pop.device
-        n = pop.n_agents
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        # Runner movement
         daughters = pop.positions + self.d_runner * (torch.rand_like(pop.positions) - 0.5)
         daughters = daughters.clamp(min=lb, max=ub)
         daughter_fit = fn(daughters)
 
-        # Check effectiveness
         best_fit = pop.best_fitness
         effectiveness = torch.abs(self.last_best_fit - best_fit) / (self.last_best_fit.abs() + c.EPSILON)
 
         if effectiveness < self.tol:
-            # Large stalling search
+            # Search at runner and root scales after insufficient improvement
             daughters = daughters + self.d_runner * torch.randn_like(daughters)
             daughters = daughters.clamp(min=lb, max=ub)
             daughter_fit = fn(daughters)
 
-            # Small stalling (root) search
             roots = pop.positions + self.d_root * (torch.rand_like(pop.positions) - 0.5)
             roots = roots.clamp(min=lb, max=ub)
             root_fit = fn(roots)
 
-            # Keep better of daughters vs roots
             use_root = root_fit < daughter_fit
             daughters[use_root] = roots[use_root]
             daughter_fit[use_root] = root_fit[use_root]
@@ -122,14 +145,12 @@ class RRA(Optimizer):
         else:
             self.n_stall = 0
 
-        # Replace if improved
         improved = daughter_fit < pop.fitness
         pop.positions[improved] = daughters[improved]
         pop.fitness[improved] = daughter_fit[improved]
 
         self.last_best_fit = pop.best_fitness.clone()
 
-        # Stall reset
         if self.n_stall >= self.max_stall:
             pop.positions = torch.rand_like(pop.positions) * (ub - lb) + lb
             pop.fitness = fn(pop.positions)
