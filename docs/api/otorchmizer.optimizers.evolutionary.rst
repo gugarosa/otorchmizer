@@ -10,6 +10,8 @@ Evolutionary optimizers are inspired by Darwinian evolution — selection, cross
     otorchmizer.optimizers.evolutionary.es
     otorchmizer.optimizers.evolutionary.foa
     otorchmizer.optimizers.evolutionary.ga
+    otorchmizer.optimizers.evolutionary.gp
+    otorchmizer.optimizers.evolutionary.gsgp
     otorchmizer.optimizers.evolutionary.hs
     otorchmizer.optimizers.evolutionary.iwo
     otorchmizer.optimizers.evolutionary.rra

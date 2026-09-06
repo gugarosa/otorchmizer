@@ -5,10 +5,10 @@ not a drop-in replacement, and matching class names do not guarantee identical
 trajectories. Validate objective batching, dtype, update semantics, and device support
 for the actual workload rather than extrapolating the historical benchmark results.
 
-Known algorithm identity, equation, and parameter differences are listed in
-[Algorithm migration limits](algorithm_limits.rst). In particular, ``ABO``, ``FSO``,
-and ``SSO`` currently implement different algorithm identities from their intended
-migration targets.
+Version 2.0 restores the intended identities of `ABO`, `FSO`, and `SSO`, completes
+the documented partial migrations, and adds `GP`, `GSGP`, `LOA`, `NDS`, `NBJS`, and `WWO`.
+[Migration contracts and limits](algorithm_limits.rst) records the canonical
+parameters, deliberate reference corrections, and device constraints.
 
 ---
 
@@ -261,16 +261,16 @@ tensor replacement is CUDA-Graph compatible.
 
 ## Algorithm Reference
 
-The following 91 optimizer classes are exported. Their source implementations and
+The following 97 optimizer classes are exported. Their source implementations and
 documented variants, not their names alone, define behavior:
 
 | Family | Algorithms |
 |--------|-----------|
-| **Swarm** (33) | ABC, ABO, AF, AIWPSO, BA, BOA, BWO, CS, CSA, EHO, FA, FFOA, FPA, FSO, GOA, JS, KH, MFO, MRFO, PIO, PSO, RPSO, SAVPSO, SBO, SCA, SFO, SOS, SSA, SSO, STOA, VPSO, WAOA, WOA |
-| **Evolutionary** (14) | BSA, DE, EP, ES, FOA, GA, GHS, GOGHS, HS, IHS, IWO, NGHS, RRA, SGHS |
-| **Misc** (5) | AOA, CEM, DOA, GS, HC |
-| **Population** (11) | AEO, AO, COA, EPO, GCO, GWO, HHO, OSA, PPA, PVS, RFO |
-| **Science** (19) | AIG, ASO, BH, CDO, EFO, EO, ESA, GSA, HGSO, LSA, MOA, MVO, SA, SMA, TEO, TWO, WCA, WDO, WEO |
+| **Swarm** (34) | ABC, ABO, AF, AIWPSO, BA, BOA, BWO, CS, CSA, EHO, FA, FFOA, FPA, FSO, GOA, JS, KH, MFO, MRFO, NBJS, PIO, PSO, RPSO, SAVPSO, SBO, SCA, SFO, SOS, SSA, SSO, STOA, VPSO, WAOA, WOA |
+| **Evolutionary** (16) | BSA, DE, EP, ES, FOA, GA, GHS, GOGHS, GP, GSGP, HS, IHS, IWO, NGHS, RRA, SGHS |
+| **Misc** (6) | AOA, CEM, DOA, GS, HC, NDS |
+| **Population** (12) | AEO, AO, COA, EPO, GCO, GWO, HHO, LOA, OSA, PPA, PVS, RFO |
+| **Science** (20) | AIG, ASO, BH, CDO, EFO, EO, ESA, GSA, HGSO, LSA, MOA, MVO, SA, SMA, TEO, TWO, WCA, WDO, WEO, WWO |
 | **Social** (6) | BSO, CI, ISA, MVPA, QSA, SSD |
 | **Boolean** (3) | BMRFO, BPSO, UMDA |
 
@@ -289,7 +289,7 @@ from otorchmizer.optimizers.misc import HC, GS, CEM
 
 ## Parameter Passing
 
-Parameters work identically — pass a dictionary to the constructor:
+Pass algorithm parameters as a dictionary to the constructor:
 
 ```python
 # Opytimizer
@@ -298,6 +298,57 @@ pso = PSO(params={"w": 0.5, "c1": 2.0, "c2": 2.0})
 # Otorchmizer — same API
 pso = PSO(params={"w": 0.5, "c1": 2.0, "c2": 2.0})
 ```
+
+When upgrading from Otorchmizer 1.x, rename `c_val` to `c` in WDO and SSD,
+`lower_bound_prob`/`upper_bound_prob` to `lower_bound`/`upper_bound` in UMDA, and
+`alpha_val`/`beta_val` to `alpha`/`beta` in TWO. The previous misspelled attributes
+are not aliases. The parameter dictionary still supports custom attributes,
+so accepting a key does not guarantee that the algorithm uses it.
+
+ABO, FSO, and SSO now select the actual Opytimizer identities, not the unrelated
+1.x implementations. Their parameters and behavior must be migrated together.
+See the compatibility table in [Migration contracts and limits](algorithm_limits.rst).
+
+## Precomputed Pareto Fronts
+
+NDS operates on objective vectors rather than a scalar fitness function:
+
+```python
+import torch
+
+from otorchmizer.optimizers.misc import NDS
+from otorchmizer.spaces import ParetoSpace
+
+points = torch.tensor([[1.0, 3.0], [2.0, 2.0], [3.0, 3.0]], dtype=torch.float64)
+space = ParetoSpace(points, device="auto")
+optimizer = NDS({"maximize": False})
+optimizer.compile(space.population)
+optimizer.evaluate(space.population)
+
+front = space.population.positions[optimizer.status == 0]
+```
+
+`maximize=True` matches the migration source's orientation. Set it to `False`
+for minimization. Rank zero is the nondominated front; equal points share a rank.
+No objective-vector scalarization takes place, and reevaluation resets the counts.
+
+## Genetic Programming State
+
+GP and GSGP use `TreeSpace`; their positions are decoded from expression trees.
+Use `space.to(device, dtype)` to move or cast the complete space, including
+terminal prototypes, current trees, and the archived best tree. Converting only
+`space.population` leaves inconsistent state and is rejected.
+
+Configure this before constructing `Otorchmizer`. If a bound space is transferred
+later, call `optimizer.rebind(space)` before continuing; this resets compiled
+dispatch and preallocated optimizer state. Historical best trees are retained
+and rescored after transfer.
+
+Position-transforming callbacks are unsupported for GP/GSGP because they would
+separate the recorded phenotype from its expression tree. Observational and
+lifecycle callbacks remain available. See
+[`create_gp.py`](../examples/optimizers/evolutionary/create_gp.py) for an executable
+example of both variants.
 
 ---
 
@@ -334,5 +385,7 @@ parallel update order, and algorithm variants can change results. Compare meanin
 quality and evaluation-budget invariants rather than expecting identical trajectories.
 
 **Q: Which algorithms are not yet migrated?**
-GP, LOA, and NDS are not exported here. `GraphSpace` is an experimental descriptor,
-not a complete population-backed space for the main optimization loop.
+All 97 optimizer classes from Opytimizer 3.1.4 are exported. This includes the six
+previously missing classes: GP, GSGP, LOA, NDS, NBJS, and WWO.
+`GraphSpace` remains an experimental descriptor: the reference also lacks a
+working graph-search implementation, so it is not an omitted optimizer migration.

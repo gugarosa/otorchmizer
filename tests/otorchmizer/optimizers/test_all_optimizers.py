@@ -101,7 +101,7 @@ def make_ctx(space, fn, iteration=0, n_iterations=10):
         function=fn,
         iteration=iteration,
         n_iterations=n_iterations,
-        device=torch.device("cpu"),
+        device=space.device,
     )
 
 

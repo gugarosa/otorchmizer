@@ -11,6 +11,7 @@ Population-based optimizers use group dynamics such as hierarchies, predation, a
     otorchmizer.optimizers.population.gco
     otorchmizer.optimizers.population.gwo
     otorchmizer.optimizers.population.hho
+    otorchmizer.optimizers.population.loa
     otorchmizer.optimizers.population.osa
     otorchmizer.optimizers.population.ppa
     otorchmizer.optimizers.population.pvs

@@ -1,7 +1,7 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-from otorchmizer.optimizers.swarm import ABC, BA, CS, SCA, SSA
+from otorchmizer.optimizers.swarm import ABC, BA, CS, NBJS, SCA, SSA
 
 # Artificial Bee Colony
 abc = ABC(params={"n_trials": 10})
@@ -22,3 +22,6 @@ print(f"Algorithm: {ssa.algorithm}")
 # Sine Cosine Algorithm
 sca = SCA(params={"r_min": 0.0, "a": 2.0})
 print(f"Algorithm: {sca.algorithm}")
+
+nbjs = NBJS()
+print(f"Algorithm: {nbjs.algorithm}")

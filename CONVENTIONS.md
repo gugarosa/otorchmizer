@@ -11,6 +11,12 @@ project's architecture.
 - Population positions have shape `(n_agents, n_variables, n_dimensions)`, and
   scalar fitness has shape `(n_agents,)`. Keep shape, device, and dtype metadata
   consistent with the stored tensors.
+- Preserve the best evaluated valid candidate before selection or restart can discard
+  it. Keeping a result archive does not require forcing elitist population selection.
+- TreeSpace owns expression trees, terminal tensors, and their population phenotypes.
+  Transfer the complete owned state rather than casting only phenotype outputs.
+- Sample distributions directly on the requested device and dtype. An omitted dtype
+  follows the PyTorch default rather than imposing a hidden float32 conversion.
 - Unevaluated fitness uses positive infinity. `FLOAT_MAX` remains the public finite
   float32 limit, not a universal initialization sentinel.
 - Evaluate each algorithm against its documented equations and invariants. A smoke
