@@ -110,7 +110,8 @@ class FPA(Optimizer):
             beta=self.beta,
             size=pop.positions.shape,
             device=device,
-        ).to(dtype=pop.dtype)
+            dtype=pop.dtype,
+        )
         global_pos = pop.positions + self.eta * levy * (best - pop.positions)
 
         j = torch.randint(0, n, (n,), device=device)

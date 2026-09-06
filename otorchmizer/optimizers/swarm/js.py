@@ -1,12 +1,12 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Jellyfish Search.
+"""Jellyfish Search algorithms.
 
 References:
     J.-S. Chou and D.-N. Truong.
-    A novel metaheuristic optimizer inspired by behavior of jellyfish
-    in ocean. Applied Mathematics and Computation (2021).
+    A novel metaheuristic optimizer inspired by behavior of jellyfish in ocean.
+    Applied Mathematics and Computation (2021).
 
 """
 
@@ -24,12 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 class JS(Optimizer):
-    """Jellyfish Search optimizer.
-
-    Notes:
-        Ocean current, swarm motion, and time control mechanism.
-
-    """
+    """Jellyfish Search optimizer."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -41,41 +36,17 @@ class JS(Optimizer):
 
         logger.info("Overriding class: Optimizer -> JS.")
 
+        self.eta = 4.0
         self.beta = 3.0
         self.gamma = 0.1
-        self.eta = 4.0
 
         super().__init__(params)
 
         logger.info("Class overrided.")
 
     @property
-    def beta(self) -> float:
-        """Return the algorithm coefficient."""
-
-        return self._beta
-
-    @beta.setter
-    def beta(self, beta: float) -> None:
-        if not isinstance(beta, (float, int)):
-            raise e.TypeError("`beta` must be a float or integer.")
-        self._beta = beta
-
-    @property
-    def gamma(self) -> float:
-        """Return the gamma."""
-
-        return self._gamma
-
-    @gamma.setter
-    def gamma(self, gamma: float) -> None:
-        if not isinstance(gamma, (float, int)):
-            raise e.TypeError("`gamma` must be a float or integer.")
-        self._gamma = gamma
-
-    @property
     def eta(self) -> float:
-        """Return the step-size coefficient."""
+        """Return the logistic-map coefficient."""
 
         return self._eta
 
@@ -83,7 +54,64 @@ class JS(Optimizer):
     def eta(self, eta: float) -> None:
         if not isinstance(eta, (float, int)):
             raise e.TypeError("`eta` must be a float or integer.")
+        if not 0 < eta <= 4:
+            raise e.ValueError("`eta` must be greater than 0 and at most 4.")
         self._eta = eta
+
+    @property
+    def beta(self) -> float:
+        """Return the ocean-current distribution coefficient."""
+
+        return self._beta
+
+    @beta.setter
+    def beta(self, beta: float) -> None:
+        if not isinstance(beta, (float, int)):
+            raise e.TypeError("`beta` must be a float or integer.")
+        if beta <= 0:
+            raise e.ValueError("`beta` must be positive.")
+        self._beta = beta
+
+    @property
+    def gamma(self) -> float:
+        """Return the passive-motion coefficient."""
+
+        return self._gamma
+
+    @gamma.setter
+    def gamma(self, gamma: float) -> None:
+        if not isinstance(gamma, (float, int)):
+            raise e.TypeError("`gamma` must be a float or integer.")
+        if gamma <= 0:
+            raise e.ValueError("`gamma` must be positive.")
+        self._gamma = gamma
+
+    def compile(self, population) -> None:
+        """Initialize the population with a logistic chaotic map.
+
+        Args:
+            population: Population to initialize.
+
+        """
+
+        chaotic = torch.empty_like(population.positions)
+        chaotic[0] = torch.rand_like(chaotic[0])
+        for i in range(1, population.n_agents):
+            chaotic[i] = self.eta * chaotic[i - 1] * (1 - chaotic[i - 1])
+        chaotic = chaotic.clamp(0, 1)
+        population.positions = population.lb.unsqueeze(0) + chaotic * (
+            population.ub.unsqueeze(0) - population.lb.unsqueeze(0)
+        )
+
+    def _motion_a(self, pop) -> torch.Tensor:
+        random = torch.rand(
+            pop.n_agents,
+            1,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        )
+        return self.gamma * random * (pop.ub.unsqueeze(0) - pop.lb.unsqueeze(0))
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -94,38 +122,83 @@ class JS(Optimizer):
         """
 
         pop = ctx.space.population
-        device = pop.device
         n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
+        ratio = ctx.iteration / max(ctx.n_iterations, 1)
+        control_random = torch.rand(n, device=pop.device, dtype=pop.dtype)
+        control = torch.abs((1 - ratio) * (2 * control_random - 1))
 
-        t = ctx.iteration / max(ctx.n_iterations, 1)
-
-        c_t = torch.abs((1 - t) * (2 * torch.rand(1, device=device, dtype=pop.dtype) - 1))
-
-        if c_t.item() >= 0.5:
-            mean_pos = pop.positions.mean(dim=0, keepdim=True)
-            trend = best - self.beta * torch.rand(1, 1, 1, device=device, dtype=pop.dtype) * mean_pos
-            new_positions = pop.positions + torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * trend
-        else:
-            r = torch.rand(n, device=device, dtype=pop.dtype)
-            j = torch.randint(0, n, (n,), device=device)
-
-            active = (r >= 0.5).view(n, 1, 1)
-
-            direction_a = pop.positions[j] - pop.positions
-            sign_a = torch.where(
-                (pop.fitness[j] < pop.fitness).view(n, 1, 1),
-                torch.ones(1, device=device, dtype=pop.dtype),
-                torch.ones(1, device=device, dtype=pop.dtype) * -1,
+        mean_position = pop.positions.mean(dim=0, keepdim=True)
+        trend_random = torch.rand(n, 1, 1, device=pop.device, dtype=pop.dtype)
+        trend = best - self.beta * trend_random * mean_position
+        ocean_positions = (
+            pop.positions
+            + torch.rand(
+                n,
+                1,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
             )
-            step_a = self.gamma * torch.rand(n, 1, 1, device=device, dtype=pop.dtype) * sign_a * direction_a
+            * trend
+        )
 
-            step_b = (
-                self.eta * torch.rand(n, pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype) * (ub - lb)
+        motion_selector = torch.rand(n, device=pop.device, dtype=pop.dtype)
+        passive_positions = pop.positions + self._motion_a(pop)
+        neighbours = torch.randint(0, n, (n,), device=pop.device)
+        neighbour_positions = pop.positions[neighbours]
+        toward_better = pop.fitness[neighbours] <= pop.fitness
+        direction = torch.where(
+            toward_better.view(n, 1, 1),
+            neighbour_positions - pop.positions,
+            pop.positions - neighbour_positions,
+        )
+        active_positions = (
+            pop.positions
+            + torch.rand(
+                n,
+                1,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
             )
+            * direction
+        )
+        swarm_positions = torch.where(
+            (motion_selector > 1 - control).view(n, 1, 1),
+            passive_positions,
+            active_positions,
+        )
+        new_positions = torch.where(
+            (control >= 0.5).view(n, 1, 1),
+            ocean_positions,
+            swarm_positions,
+        )
+        pop.positions = new_positions.clamp(min=pop.lb.unsqueeze(0), max=pop.ub.unsqueeze(0))
 
-            new_positions = pop.positions + torch.where(active, step_a, step_b)
 
-        pop.positions = new_positions.clamp(min=lb, max=ub)
+class NBJS(JS):
+    """Jellyfish Search variant with bound-independent passive motion."""
+
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            params: Algorithm parameter overrides.
+
+        """
+
+        logger.info("Overriding class: JS -> NBJS.")
+
+        super().__init__(params)
+
+        logger.info("Class overrided.")
+
+    def _motion_a(self, pop) -> torch.Tensor:
+        return self.gamma * torch.rand(
+            pop.n_agents,
+            1,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        )

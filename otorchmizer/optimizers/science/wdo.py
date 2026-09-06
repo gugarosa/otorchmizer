@@ -37,6 +37,10 @@ class WDO(Optimizer):
         Args:
             params: Algorithm parameter overrides.
 
+        Raises:
+            TypeError: A force or velocity coefficient is not numeric.
+            ValueError: A coefficient is negative or friction is outside [0, 1].
+
         """
 
         logger.info("Overriding class: Optimizer -> WDO.")
@@ -44,10 +48,16 @@ class WDO(Optimizer):
         self.v_max = 0.3
         self.alpha = 0.8
         self.g = 0.6
-        self.c_val = 1.0
+        self.c = 1.0
         self.RT = 1.5
 
         super().__init__(params)
+        for name in ("g", "c", "RT"):
+            value = getattr(self, name)
+            if not isinstance(value, (float, int)):
+                raise e.TypeError(f"`{name}` must be a float or integer.")
+            if value < 0:
+                raise e.ValueError(f"`{name}` must be nonnegative.")
 
         logger.info("Class overrided.")
 
@@ -71,11 +81,14 @@ class WDO(Optimizer):
 
         Raises:
             TypeError: If the supplied value has an invalid type.
+            ValueError: If the maximum velocity is negative.
 
         """
 
         if not isinstance(v_max, (float, int)):
             raise e.TypeError("`v_max` must be a float or integer.")
+        if v_max < 0:
+            raise e.ValueError("`v_max` must be nonnegative.")
         self._v_max = v_max
 
     @property
@@ -98,11 +111,14 @@ class WDO(Optimizer):
 
         Raises:
             TypeError: If the supplied value has an invalid type.
+            ValueError: If friction is outside [0, 1].
 
         """
 
         if not isinstance(alpha, (float, int)):
             raise e.TypeError("`alpha` must be a float or integer.")
+        if not 0 <= alpha <= 1:
+            raise e.ValueError("`alpha` must be between 0 and 1.")
         self._alpha = alpha
 
     def compile(self, population) -> None:
@@ -137,7 +153,7 @@ class WDO(Optimizer):
                 (1 - self.alpha) * self.velocity[i]
                 - self.g * pop.positions[i]
                 + self.RT * abs(1.0 / (idx + 1) - 1) * (best.squeeze(0) - pop.positions[i])
-                + self.c_val * self.velocity[idx] / (idx + 1)
+                + self.c * self.velocity[idx] / (idx + 1)
             )
 
             self.velocity[i] = new_vel.clamp(min=-self.v_max, max=self.v_max)

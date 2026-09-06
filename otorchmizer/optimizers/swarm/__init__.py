@@ -17,7 +17,7 @@ from otorchmizer.optimizers.swarm.ffoa import FFOA
 from otorchmizer.optimizers.swarm.fpa import FPA
 from otorchmizer.optimizers.swarm.fso import FSO
 from otorchmizer.optimizers.swarm.goa import GOA
-from otorchmizer.optimizers.swarm.js import JS
+from otorchmizer.optimizers.swarm.js import JS, NBJS
 from otorchmizer.optimizers.swarm.kh import KH
 from otorchmizer.optimizers.swarm.mfo import MFO
 from otorchmizer.optimizers.swarm.mrfo import MRFO
@@ -53,6 +53,7 @@ __all__ = [
     "KH",
     "MFO",
     "MRFO",
+    "NBJS",
     "PIO",
     "PSO",
     "RPSO",

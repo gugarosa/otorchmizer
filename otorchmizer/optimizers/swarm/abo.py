@@ -1,12 +1,12 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""African Buffalo Optimization.
+"""Artificial Butterfly Optimization.
 
 References:
-    J. Odili and M. Mohmad Kahar.
-    Solving the Traveling Salesman's Problem Using the African Buffalo Optimization.
-    Computational Intelligence and Neuroscience (2016).
+    X. Qi, Y. Zhu, and H. Zhang.
+    A new meta-heuristic butterfly-inspired algorithm.
+    Journal of Computational Science (2017).
 
 """
 
@@ -24,12 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 class ABO(Optimizer):
-    """African Buffalo Optimization.
-
-    Notes:
-        Mimics the movement patterns of African buffaloes.
-
-    """
+    """Artificial Butterfly Optimization."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -41,8 +36,8 @@ class ABO(Optimizer):
 
         logger.info("Overriding class: Optimizer -> ABO.")
 
-        self.sunspot_ratio = 0.99
-        self.starvation_ratio = 0.5
+        self.sunspot_ratio = 0.9
+        self.a = 2.0
 
         super().__init__(params)
 
@@ -50,7 +45,7 @@ class ABO(Optimizer):
 
     @property
     def sunspot_ratio(self) -> float:
-        """Return the sunspot population proportion."""
+        """Return the sunspot butterfly proportion."""
 
         return self._sunspot_ratio
 
@@ -58,31 +53,23 @@ class ABO(Optimizer):
     def sunspot_ratio(self, sunspot_ratio: float) -> None:
         if not isinstance(sunspot_ratio, (float, int)):
             raise e.TypeError("`sunspot_ratio` must be a float or integer.")
+        if not 0 <= sunspot_ratio <= 1:
+            raise e.ValueError("`sunspot_ratio` must be between 0 and 1.")
         self._sunspot_ratio = sunspot_ratio
 
     @property
-    def starvation_ratio(self) -> float:
-        """Return the starvation reset probability."""
+    def a(self) -> float:
+        """Return the free-flight coefficient."""
 
-        return self._starvation_ratio
+        return self._a
 
-    @starvation_ratio.setter
-    def starvation_ratio(self, starvation_ratio: float) -> None:
-        if not isinstance(starvation_ratio, (float, int)):
-            raise e.TypeError("`starvation_ratio` must be a float or integer.")
-        self._starvation_ratio = starvation_ratio
-
-    def compile(self, population) -> None:
-        """Initialize persistent optimizer state.
-
-        Args:
-            population: Population that defines the state shape, device, and dtype.
-
-        """
-
-        shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.w1 = torch.zeros(shape, device=population.device, dtype=population.dtype)
-        self.w2 = torch.zeros(shape, device=population.device, dtype=population.dtype)
+    @a.setter
+    def a(self, a: float) -> None:
+        if not isinstance(a, (float, int)):
+            raise e.TypeError("`a` must be a float or integer.")
+        if a < 0:
+            raise e.ValueError("`a` must be non-negative.")
+        self._a = a
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -93,25 +80,39 @@ class ABO(Optimizer):
         """
 
         pop = ctx.space.population
-        device = pop.device
+        fn = ctx.function
         n = pop.n_agents
+        lb = pop.lb
+        ub = pop.ub
 
-        best = pop.best_position.unsqueeze(0)
+        order = torch.argsort(pop.fitness)
+        pop.positions = pop.positions[order]
+        pop.fitness = pop.fitness[order]
+        n_sunspots = int(self.sunspot_ratio * n)
 
-        lp1 = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-        lp2 = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
+        for i in range(n):
+            neighbour_limit = n if i < n_sunspots else n - n_sunspots
+            neighbour = torch.randint(0, neighbour_limit, (), device=pop.device)
+            variable = torch.randint(0, pop.n_variables, (), device=pop.device)
+            flight = torch.rand((), device=pop.device, dtype=pop.dtype) * 2 - 1
+            candidate = pop.positions[i].clone()
+            candidate[variable] += (pop.positions[i, variable] - pop.positions[neighbour, variable]) * flight
+            candidate = candidate.clamp(min=lb, max=ub)
+            candidate_fitness = fn(candidate.unsqueeze(0))[0]
 
-        self.w1 = self.w1 + lp1 * (best - pop.positions) + lp2 * (self.w1 - pop.positions)
-        self.w2 = self.w2 / 2 + self.w1
+            if candidate_fitness < pop.fitness[i]:
+                pop.positions[i] = candidate
+                pop.fitness[i] = candidate_fitness
+            elif i >= n_sunspots:
+                reference = torch.randint(0, n, (), device=pop.device)
+                r1 = torch.rand((), device=pop.device, dtype=pop.dtype)
+                distance = torch.abs(2 * r1 * pop.positions[reference] - pop.positions[i])
+                r2 = torch.rand((), device=pop.device, dtype=pop.dtype)
+                progress = min(ctx.iteration / max(ctx.n_iterations, 1), 1)
+                decay = self.a * (1 - progress)
+                free_flight = pop.positions[reference] - 2 * decay * r2 - decay * distance
+                free_flight = free_flight.clamp(min=lb, max=ub)
+                pop.positions[i] = free_flight
+                pop.fitness[i] = fn(free_flight.unsqueeze(0))[0]
 
-        pop.positions = pop.positions + self.w2
-
-        r = torch.rand(n, device=device, dtype=pop.dtype)
-        starving = r < self.starvation_ratio
-        if starving.any():
-            lb = pop.lb.unsqueeze(0)
-            ub = pop.ub.unsqueeze(0)
-            n_s = starving.sum().item()
-            pop.positions[starving] = (
-                torch.rand(n_s, pop.n_variables, pop.n_dimensions, device=device, dtype=pop.dtype) * (ub - lb) + lb
-            )
+        pop.update_best()

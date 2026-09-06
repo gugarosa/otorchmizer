@@ -109,7 +109,8 @@ class CS(Optimizer):
             beta=self.beta,
             size=pop.positions.shape,
             device=device,
-        ).to(dtype=pop.dtype)
+            dtype=pop.dtype,
+        )
         step_size = self.alpha * levy * (pop.positions - best)
         new_positions = pop.positions + step_size
         new_positions = new_positions.clamp(min=lb, max=ub)

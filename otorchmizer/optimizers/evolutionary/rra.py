@@ -56,6 +56,8 @@ class RRA(Optimizer):
     def d_runner(self, d_runner: float) -> None:
         if not isinstance(d_runner, (float, int)):
             raise e.TypeError("`d_runner` must be a float or integer.")
+        if d_runner <= 0:
+            raise e.ValueError("`d_runner` must be positive.")
         self._d_runner = d_runner
 
     @property
@@ -68,6 +70,8 @@ class RRA(Optimizer):
     def d_root(self, d_root: float) -> None:
         if not isinstance(d_root, (float, int)):
             raise e.TypeError("`d_root` must be a float or integer.")
+        if d_root < 0:
+            raise e.ValueError("`d_root` must be non-negative.")
         self._d_root = d_root
 
     @property
@@ -80,6 +84,8 @@ class RRA(Optimizer):
     def tol(self, tol: float) -> None:
         if not isinstance(tol, (float, int)):
             raise e.TypeError("`tol` must be a float or integer.")
+        if tol < 0:
+            raise e.ValueError("`tol` must be non-negative.")
         self._tol = tol
 
     @property
@@ -107,8 +113,45 @@ class RRA(Optimizer):
         self.n_stall = 0
         self.last_best_fit = population.best_fitness.clone()
 
+    def _stalling_search(
+        self,
+        pop,
+        position: torch.Tensor,
+        fitness: torch.Tensor,
+        function,
+        is_large: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        best_position = position.clone()
+        best_fitness = fitness.clone()
+
+        for _ in range(max(pop.n_agents - 1, 0)):
+            candidate = best_position.clone()
+            variable = torch.randint(0, pop.n_variables, (1,), device=pop.device)
+            if is_large:
+                step = self.d_runner * torch.randn(1, device=pop.device, dtype=pop.dtype)
+            else:
+                step = self.d_root * (torch.rand(1, device=pop.device, dtype=pop.dtype) - 0.5)
+            candidate[variable] += step
+            candidate = candidate.clamp(min=pop.lb, max=pop.ub)
+            candidate_fitness = function(candidate.unsqueeze(0))[0]
+            if candidate_fitness < best_fitness:
+                best_position = candidate
+                best_fitness = candidate_fitness
+
+        return best_position, best_fitness
+
+    @staticmethod
+    def _roulette_selection(fitness: torch.Tensor, n: int) -> torch.Tensor:
+        if n == 0:
+            return torch.empty(0, dtype=torch.long, device=fitness.device)
+
+        shifted_fitness = fitness - fitness.min()
+        inverse_fitness = 1 / (shifted_fitness + 0.1)
+        probabilities = inverse_fitness / inverse_fitness.sum()
+        return torch.multinomial(probabilities, n, replacement=True)
+
     def update(self, ctx: UpdateContext) -> None:
-        """Generate runner and root candidates and update stall tracking.
+        """Generate daughters, apply stall searches, and reproduce the population.
 
         Args:
             ctx: Current optimization state and objective.
@@ -120,38 +163,68 @@ class RRA(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
-        daughters = pop.positions + self.d_runner * (torch.rand_like(pop.positions) - 0.5)
-        daughters = daughters.clamp(min=lb, max=ub)
-        daughter_fit = fn(daughters)
+        sorted_idx = torch.argsort(pop.fitness)
+        positions = pop.positions[sorted_idx]
+        fitness = pop.fitness[sorted_idx]
+        previous_best = fitness[0].clone()
 
-        best_fit = pop.best_fitness
-        effectiveness = torch.abs(self.last_best_fit - best_fit) / (self.last_best_fit.abs() + c.EPSILON)
+        daughters = positions.clone()
+        daughter_fit = fitness.clone()
+        if pop.n_agents > 1:
+            runner_step = self.d_runner * (
+                torch.rand(
+                    pop.n_agents - 1,
+                    1,
+                    1,
+                    device=pop.device,
+                    dtype=pop.dtype,
+                )
+                - 0.5
+            )
+            daughters[1:] = (daughters[1:] + runner_step).clamp(min=lb, max=ub)
+            daughter_fit[1:] = fn(daughters[1:])
+
+        daughter_idx = torch.argsort(daughter_fit)
+        daughters = daughters[daughter_idx]
+        daughter_fit = daughter_fit[daughter_idx]
+        effectiveness = torch.abs(previous_best - daughter_fit[0]) / (previous_best.abs() + c.EPSILON)
 
         if effectiveness < self.tol:
-            # Search at runner and root scales after insufficient improvement
-            daughters = daughters + self.d_runner * torch.randn_like(daughters)
-            daughters = daughters.clamp(min=lb, max=ub)
-            daughter_fit = fn(daughters)
+            daughters[0], daughter_fit[0] = self._stalling_search(
+                pop,
+                daughters[0],
+                daughter_fit[0],
+                fn,
+                is_large=True,
+            )
+            daughters[0], daughter_fit[0] = self._stalling_search(
+                pop,
+                daughters[0],
+                daughter_fit[0],
+                fn,
+                is_large=False,
+            )
 
-            roots = pop.positions + self.d_root * (torch.rand_like(pop.positions) - 0.5)
-            roots = roots.clamp(min=lb, max=ub)
-            root_fit = fn(roots)
+        daughter_best = daughter_fit.argmin()
+        if daughter_fit[daughter_best] < pop.best_fitness:
+            pop.best_position = daughters[daughter_best].clone()
+            pop.best_fitness = daughter_fit[daughter_best].clone()
 
-            use_root = root_fit < daughter_fit
-            daughters[use_root] = roots[use_root]
-            daughter_fit[use_root] = root_fit[use_root]
+        selected = self._roulette_selection(daughter_fit, pop.n_agents - 1)
+        pop.positions = torch.cat((daughters[:1], daughters[selected]))
+        pop.fitness = torch.cat((daughter_fit[:1], daughter_fit[selected]))
 
-            self.n_stall += 1
-        else:
-            self.n_stall = 0
-
-        improved = daughter_fit < pop.fitness
-        pop.positions[improved] = daughters[improved]
-        pop.fitness[improved] = daughter_fit[improved]
-
-        self.last_best_fit = pop.best_fitness.clone()
+        effectiveness = torch.abs(previous_best - daughter_fit[0]) / (previous_best.abs() + c.EPSILON)
+        self.n_stall = self.n_stall + 1 if effectiveness < self.tol else 0
 
         if self.n_stall >= self.max_stall:
             pop.positions = torch.rand_like(pop.positions) * (ub - lb) + lb
             pop.fitness = fn(pop.positions)
+            restart_best = pop.fitness.argmin()
+            if pop.fitness[restart_best] < pop.best_fitness:
+                pop.best_position = pop.positions[restart_best].clone()
+                pop.best_fitness = pop.fitness[restart_best].clone()
             self.n_stall = 0
+
+        self.last_best_fit = pop.fitness.min().clone()
+        pop.update_best()

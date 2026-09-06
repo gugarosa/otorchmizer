@@ -12,20 +12,27 @@ References:
 
 from __future__ import annotations
 
+from math import exp, pi, sin, sqrt
 from typing import Any
 
 import torch
 
-import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
 
 logger = logging.get_logger(__name__)
 
 
 class ASO(Optimizer):
-    """Atom Search Optimization."""
+    """Atom Search Optimization.
+
+    Notes:
+        Interatomic Lennard-Jones forces and the best-atom constraint share the
+        gravitational decay and inverse-mass scaling in the acceleration equation.
+
+    """
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the ASO optimizer.
@@ -43,7 +50,7 @@ class ASO(Optimizer):
 
     @property
     def alpha(self) -> float:
-        """Return the alpha coefficient.
+        """Return the interatomic potential depth weight.
 
         Returns:
             float: Current alpha coefficient.
@@ -70,7 +77,7 @@ class ASO(Optimizer):
 
     @property
     def beta(self) -> float:
-        """Return the beta coefficient.
+        """Return the best-atom constraint weight.
 
         Returns:
             float: Current beta coefficient.
@@ -88,14 +95,17 @@ class ASO(Optimizer):
 
         Raises:
             TypeError: If the supplied value has an invalid type.
+            ValueError: If the constraint weight is outside [0, 1].
 
         """
 
         if not isinstance(beta, (float, int)):
             raise e.TypeError("`beta` must be a float or integer.")
+        if not 0 <= beta <= 1:
+            raise e.ValueError("`beta` must be between 0 and 1.")
         self._beta = beta
 
-    def compile(self, population) -> None:
+    def compile(self, population: Population) -> None:
         """Initialize optimizer state for a population.
 
         Args:
@@ -103,8 +113,7 @@ class ASO(Optimizer):
 
         """
 
-        shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.velocity = population.positions.new_zeros(shape)
+        self.velocity = torch.zeros_like(population.positions)
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one ASO step.
@@ -112,37 +121,40 @@ class ASO(Optimizer):
         Args:
             ctx: Update context containing the population, objective, and iteration state.
 
+        Raises:
+            ValueError: The population contains non-finite fitness values.
+
         """
 
         pop = ctx.space.population
-        device = pop.device
         n = pop.n_agents
-        best = pop.best_position.unsqueeze(0)
-        t = ctx.iteration / max(ctx.n_iterations, 1)
+        if not torch.isfinite(pop.fitness).all():
+            raise e.ValueError("`population.fitness` must be finite for ASO mass calculation.")
 
-        G = torch.exp(torch.tensor(-20.0 * t, device=device))
+        tiny = torch.finfo(pop.dtype).tiny
+        fitness = pop.fitness / pop.fitness.abs().max().clamp_min(tiny)
+        spread = (fitness.max() - fitness.min()).clamp_min(tiny)
+        mass = torch.exp(-(fitness - fitness.min()) / spread)
+        mass /= mass.sum()
 
-        # Mass
-        worst_fit = pop.fitness.max()
-        best_fit = pop.fitness.min()
-        m = torch.exp(-(pop.fitness - best_fit) / (worst_fit - best_fit + c.EPSILON))
-        M = m / (m.sum() + c.EPSILON)
+        progress = ctx.iteration / max(ctx.n_iterations, 1)
+        n_best = min(n, max(1, int(n - (n - 2) * sqrt(progress))))
+        neighbors = pop.positions[torch.argsort(pop.fitness)[:n_best]]
+        centroid = neighbors.mean(dim=0)
+        mean_distance = torch.linalg.vector_norm(pop.positions - centroid, dim=(1, 2)).clamp_min(tiny)
+        minimum_ratio = 1.1 + 0.1 * sin((ctx.iteration + 1) / max(ctx.n_iterations, 1) * pi / 2)
 
-        # K best
-        K = max(int(n * (1 - t)), 2)
-        sorted_idx = torch.argsort(pop.fitness)[:K]
+        force = torch.zeros_like(pop.positions)
+        for neighbor in neighbors:
+            displacement = neighbor - pop.positions
+            radius = torch.linalg.vector_norm(displacement, dim=(1, 2)).clamp_min(tiny)
+            ratio = (radius / mean_distance).clamp(min=minimum_ratio, max=1.24)
+            potential = (1 - progress) ** 3 * (6 * ratio.pow(-7) - 12 * ratio.pow(-13))
+            weight = torch.rand(n, 1, 1, device=pop.device, dtype=pop.dtype)
+            force += weight * (potential / radius).view(n, 1, 1) * displacement
 
-        # Acceleration
-        accel = torch.zeros_like(pop.positions)
-        for i in range(n):
-            for j_idx in sorted_idx:
-                if j_idx == i:
-                    continue
-                diff = pop.positions[j_idx] - pop.positions[i]
-                dist = torch.linalg.norm(diff.reshape(-1)).clamp(min=1e-10)
-                r = torch.rand(1, device=device)
-                accel[i] += r * G * M[j_idx] * diff / dist
-
-        r = torch.rand(n, 1, 1, device=device)
-        self.velocity = r * self.velocity + accel + self.beta * (best - pop.positions)
+        attraction = pop.best_position - pop.positions
+        acceleration = exp(-20 * progress) * (self.alpha * force + self.beta * attraction) / mass.view(n, 1, 1)
+        inertia = torch.rand(n, 1, 1, device=pop.device, dtype=pop.dtype)
+        self.velocity = inertia * self.velocity + acceleration
         pop.positions = pop.positions + self.velocity

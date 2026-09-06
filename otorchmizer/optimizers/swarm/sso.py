@@ -1,12 +1,12 @@
 # Copyright (c) 2021-2026 Gustavo de Rosa.
 # Licensed under the Apache License, Version 2.0.
 
-"""Social Spider Optimization.
+"""Simplified Swarm Optimization.
 
 References:
-    E. Cuevas et al.
-    A swarm optimization algorithm inspired in the behavior of the social-spider.
-    Expert Systems with Applications (2013).
+    C. Bae et al.
+    A new simplified swarm optimization using exchange local search scheme.
+    International Journal of Innovative Computing, Information and Control (2012).
 
 """
 
@@ -17,19 +17,16 @@ from typing import Any
 import torch
 
 import otorchmizer.utils.exception as e
+from otorchmizer.core.function import Function
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
 
 logger = logging.get_logger(__name__)
 
 
 class SSO(Optimizer):
-    """Social Spider Optimization.
-
-    Notes:
-        Gender-based movement with mating and female/male dynamics.
-
-    """
+    """Simplified Swarm Optimization."""
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the optimizer.
@@ -41,53 +38,106 @@ class SSO(Optimizer):
 
         logger.info("Overriding class: Optimizer -> SSO.")
 
-        self.female_percentage = 0.65
-        self.PF = 0.7
+        self._C_w = 0.1
+        self._C_p = 0.4
+        self._C_g = 0.9
 
         super().__init__(params)
 
         logger.info("Class overrided.")
 
     @property
-    def female_percentage(self) -> float:
-        """Return the female population proportion."""
+    def C_w(self) -> float:
+        """Return the probability threshold for retaining the current value."""
 
-        return self._female_percentage
+        return self._C_w
 
-    @female_percentage.setter
-    def female_percentage(self, female_percentage: float) -> None:
-        if not isinstance(female_percentage, (float, int)):
-            raise e.TypeError("`female_percentage` must be a float or integer.")
-        if not 0 <= female_percentage <= 1:
-            raise e.ValueError("`female_percentage` must be between 0 and 1.")
-        self._female_percentage = female_percentage
+    @C_w.setter
+    def C_w(self, C_w: float) -> None:
+        self._validate_thresholds(C_w, self.C_p, self.C_g)
+        self._C_w = C_w
 
     @property
-    def PF(self) -> float:
-        """Return the female attraction probability."""
+    def C_p(self) -> float:
+        """Return the cumulative personal-best probability threshold."""
 
-        return self._PF
+        return self._C_p
 
-    @PF.setter
-    def PF(self, PF: float) -> None:
-        if not isinstance(PF, (float, int)):
-            raise e.TypeError("`PF` must be a float or integer.")
-        if not 0 <= PF <= 1:
-            raise e.ValueError("`PF` must be between 0 and 1.")
-        self._PF = PF
+    @C_p.setter
+    def C_p(self, C_p: float) -> None:
+        self._validate_thresholds(self.C_w, C_p, self.C_g)
+        self._C_p = C_p
 
-    def compile(self, population) -> None:
-        """Initialize persistent optimizer state.
+    @property
+    def C_g(self) -> float:
+        """Return the cumulative global-best probability threshold."""
+
+        return self._C_g
+
+    @C_g.setter
+    def C_g(self, C_g: float) -> None:
+        self._validate_thresholds(self.C_w, self.C_p, C_g)
+        self._C_g = C_g
+
+    @staticmethod
+    def _validate_thresholds(C_w: float, C_p: float, C_g: float) -> None:
+        for name, value in (("C_w", C_w), ("C_p", C_p), ("C_g", C_g)):
+            if not isinstance(value, (float, int)):
+                raise e.TypeError(f"`{name}` must be a float or integer.")
+        if not 0 <= C_w <= 1:
+            raise e.ValueError("`C_w` must be between 0 and 1.")
+        if not C_w <= C_p <= 1:
+            raise e.ValueError("`C_p` must be between `C_w` and 1.")
+        if not C_p <= C_g <= 1:
+            raise e.ValueError("`C_g` must be between `C_p` and 1.")
+
+    def build(self, params: dict[str, Any] | None = None) -> None:
+        """Apply parameter overrides without transiently invalid coupled thresholds.
+
+        Args:
+            params: Attribute overrides applied to the optimizer.
+
+        """
+
+        supplied = dict(params or {})
+        remaining = dict(supplied)
+        C_w = remaining.pop("C_w", self.C_w)
+        C_p = remaining.pop("C_p", self.C_p)
+        C_g = remaining.pop("C_g", self.C_g)
+        self._validate_thresholds(C_w, C_p, C_g)
+
+        super().build(remaining)
+        self._C_w, self._C_p, self._C_g = C_w, C_p, C_g
+        self.params.update(
+            {name: value for name, value in (("C_w", C_w), ("C_p", C_p), ("C_g", C_g)) if name in supplied}
+        )
+
+    def compile(self, population: Population) -> None:
+        """Initialize persistent personal-best state.
 
         Args:
             population: Population that defines the state shape, device, and dtype.
 
         """
 
-        n = population.n_agents
-        self.n_female = max(int(n * self.female_percentage), 1)
-        self.n_male = n - self.n_female
-        self.weight = torch.zeros(n, device=population.device, dtype=population.dtype)
+        self.local_position = torch.zeros_like(population.positions)
+        self.local_fitness = torch.full_like(population.fitness, torch.inf)
+
+    def evaluate(self, population: Population, function: Function) -> None:
+        """Evaluate current positions and update personal and global bests.
+
+        Args:
+            population: Population to evaluate.
+            function: Objective function applied to the population.
+
+        """
+
+        current_fitness = function(population.positions)
+        improved = current_fitness < self.local_fitness
+        self.local_position[improved] = population.positions[improved]
+        self.local_fitness[improved] = current_fitness[improved]
+        population.fitness = current_fitness
+        population.update_best()
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -98,57 +148,24 @@ class SSO(Optimizer):
         """
 
         pop = ctx.space.population
-        device = pop.device
-        n = pop.n_agents
-        best = pop.best_position.unsqueeze(0)
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
-
-        worst_fit = pop.fitness.max()
-        best_fit = pop.fitness.min()
-        self.weight = (worst_fit - pop.fitness) / (worst_fit - best_fit + 1e-10)
-
-        for i in range(self.n_female):
-            r = torch.rand(1, device=device, dtype=pop.dtype)
-            alpha = torch.rand(1, 1, device=device, dtype=pop.dtype)
-            beta = torch.rand(1, 1, device=device, dtype=pop.dtype)
-            delta = torch.rand(1, 1, device=device, dtype=pop.dtype)
-
-            j = torch.randint(0, n, (1,), device=device).item()
-
-            if r < self.PF:
-                pop.positions[i] = (
-                    pop.positions[i]
-                    + alpha * self.weight[j] * (pop.positions[j] - pop.positions[i])
-                    + beta * self.weight[0] * (best.squeeze(0) - pop.positions[i])
-                    + delta * (torch.rand_like(pop.positions[i]) - 0.5)
-                )
-            else:
-                pop.positions[i] = (
-                    pop.positions[i]
-                    - alpha * self.weight[j] * (pop.positions[j] - pop.positions[i])
-                    - beta * self.weight[0] * (best.squeeze(0) - pop.positions[i])
-                    + delta * (torch.rand_like(pop.positions[i]) - 0.5)
-                )
-
-        if self.n_male > 0:
-            male_start = self.n_female
-            male_weights = self.weight[male_start:]
-            median_weight = male_weights.median()
-
-            for i in range(male_start, n):
-                alpha = torch.rand(1, 1, device=device, dtype=pop.dtype)
-                delta = torch.rand(1, 1, device=device, dtype=pop.dtype)
-
-                if self.weight[i] > median_weight:
-                    pop.positions[i] = (
-                        pop.positions[i]
-                        + alpha * (best.squeeze(0) - pop.positions[i])
-                        + delta * (torch.rand_like(pop.positions[i]) - 0.5)
-                    )
-                else:
-                    female_weights = self.weight[: self.n_female].view(-1, 1, 1)
-                    female_mean = (female_weights * pop.positions[: self.n_female]).sum(dim=0) / female_weights.sum()
-                    pop.positions[i] = pop.positions[i] + alpha * (female_mean - pop.positions[i])
-
-        pop.positions = pop.positions.clamp(min=lb, max=ub)
+        random = torch.rand(
+            pop.n_agents,
+            pop.n_variables,
+            1,
+            device=pop.device,
+            dtype=pop.dtype,
+        )
+        random_position = torch.rand_like(pop.positions) * (
+            pop.ub.unsqueeze(0) - pop.lb.unsqueeze(0)
+        ) + pop.lb.unsqueeze(0)
+        personal = self.local_position
+        global_best = pop.best_position.unsqueeze(0)
+        pop.positions = torch.where(
+            random < self.C_w,
+            pop.positions,
+            torch.where(
+                random < self.C_p,
+                personal,
+                torch.where(random < self.C_g, global_best, random_position),
+            ),
+        )

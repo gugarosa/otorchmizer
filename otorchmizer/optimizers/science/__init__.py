@@ -24,6 +24,7 @@ from otorchmizer.optimizers.science.science_extra import (
 )
 from otorchmizer.optimizers.science.wca import WCA
 from otorchmizer.optimizers.science.wdo import WDO
+from otorchmizer.optimizers.science.wwo import WWO
 
 __all__ = [
     "AIG",
@@ -45,4 +46,5 @@ __all__ = [
     "WCA",
     "WDO",
     "WEO",
+    "WWO",
 ]

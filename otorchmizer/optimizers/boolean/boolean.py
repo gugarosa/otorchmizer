@@ -9,6 +9,7 @@ from typing import Any
 
 import torch
 
+import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
 from otorchmizer.utils import logging
 
@@ -203,13 +204,24 @@ class UMDA(Optimizer):
         Args:
             params: Algorithm parameter overrides.
 
+        Raises:
+            TypeError: A selection or probability parameter is not numeric.
+            ValueError: The selection proportion or probability interval is invalid.
+
         """
 
         logger.info("Overriding class: Optimizer -> UMDA.")
         self.p_selection = 0.75
-        self.lower_bound_prob = 0.05
-        self.upper_bound_prob = 0.95
+        self.lower_bound = 0.05
+        self.upper_bound = 0.95
         super().__init__(params)
+        for name in ("p_selection", "lower_bound", "upper_bound"):
+            if not isinstance(getattr(self, name), (float, int)):
+                raise e.TypeError(f"`{name}` must be a float or integer.")
+        if not 0 < self.p_selection <= 1:
+            raise e.ValueError("`p_selection` must be greater than 0 and at most 1.")
+        if not 0 <= self.lower_bound <= self.upper_bound <= 1:
+            raise e.ValueError("`lower_bound` and `upper_bound` must be ordered probabilities between 0 and 1.")
         logger.info("Class overrided.")
 
     def update(self, ctx: UpdateContext) -> None:
@@ -232,7 +244,7 @@ class UMDA(Optimizer):
 
         # Calculate probabilities
         probs = selected.mean(dim=0)
-        probs = probs.clamp(min=self.lower_bound_prob, max=self.upper_bound_prob)
+        probs = probs.clamp(min=self.lower_bound, max=self.upper_bound)
 
         # Sample new positions
         r = torch.rand_like(pop.positions)
