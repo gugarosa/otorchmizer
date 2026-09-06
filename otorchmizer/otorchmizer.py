@@ -68,6 +68,7 @@ class Otorchmizer:
         self.optimizer = optimizer
         self.function = function
 
+        self.optimizer.bind(space)
         self.optimizer.compile(space.population)
 
         self.history = History(save_agents=save_agents)
@@ -101,9 +102,13 @@ class Otorchmizer:
 
         """
 
+        self.optimizer.validate_space(self.space)
         callbacks.on_evaluate_before(self.space.population, self.function)
+        self.optimizer.validate_space(self.space)
         self.optimizer.evaluate(self.space.population, self.function)
+        self.optimizer.validate_space(self.space)
         callbacks.on_evaluate_after(self.space.population, self.function)
+        self.optimizer.validate_space(self.space)
 
     def update(self, callbacks: CallbackVessel) -> None:
         """Runs the update pipeline with callbacks and bound clipping.
@@ -115,11 +120,16 @@ class Otorchmizer:
 
         ctx = self._make_context()
 
+        self.optimizer.validate_space(self.space)
         callbacks.on_update_before(ctx)
+        self.optimizer.validate_space(self.space)
         self.optimizer(ctx)
+        self.optimizer.validate_space(self.space)
         callbacks.on_update_after(ctx)
+        self.optimizer.validate_space(self.space)
 
         self.space.clip()
+        self.optimizer.validate_space(self.space)
 
     def start(
         self,
@@ -171,10 +181,12 @@ class Otorchmizer:
                 )
 
                 vessel.on_iteration_end(self.total_iterations, self)
+                self.optimizer.validate_space(self.space)
 
                 logger.to_file(f"Fitness: {best_fit}")
 
         vessel.on_task_end(self)
+        self.optimizer.validate_space(self.space)
 
         elapsed = time.time() - start_time
         self.history.dump(time=elapsed)

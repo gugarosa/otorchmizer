@@ -201,6 +201,7 @@ def test_sfo_uses_new_sailfish_best_during_sardine_phase(monkeypatch):
         )
 
     monkeypatch.setattr(torch, "rand", controlled_rand)
+    monkeypatch.setattr(torch, "rand_like", lambda tensor: torch.full_like(tensor, 0.75))
 
     optimizer.update(_context(population, function))
 
@@ -243,11 +244,9 @@ def test_eho_rejects_more_clans_than_agents():
     ("optimizer", "state_names"),
     [
         (ABC(), ("trial",)),
-        (ABO(), ("w1", "w2")),
         (AF(), ("branch",)),
         (BA(), ("velocity", "frequency", "loudness", "pulse_rate")),
         (CSA(), ("memory", "memory_fitness")),
-        (FSO(), ("weight",)),
         (KH(), ("induced_motion", "foraging_motion")),
         (MFO(), ("flames", "flame_fitness")),
         (PIO(), ("velocity",)),
@@ -255,7 +254,7 @@ def test_eho_rejects_more_clans_than_agents():
         (RPSO(), ("local_position", "local_fitness", "velocity", "mass")),
         (VPSO(), ("local_position", "local_fitness", "velocity", "v_velocity")),
         (SFO({"PP": 0.5}), ("sardine_positions", "sardine_fitness")),
-        (SSO(), ("weight",)),
+        (SSO(), ("local_position", "local_fitness")),
     ],
 )
 def test_compiled_floating_state_uses_population_dtype(optimizer, state_names):

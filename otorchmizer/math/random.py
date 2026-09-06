@@ -39,6 +39,7 @@ def generate_exponential_random_number(
     scale: float = 1.0,
     size: int | tuple[int, ...] = 1,
     device: torch.device = torch.device("cpu"),
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Generate values from an exponential distribution.
 
@@ -46,6 +47,7 @@ def generate_exponential_random_number(
         scale: Scale of the distribution, equal to the reciprocal rate.
         size: Shape of the output tensor.
         device: Target device.
+        dtype: Sampling dtype, or None to use the PyTorch default.
 
     Returns:
         Exponentially distributed random tensor.
@@ -54,7 +56,8 @@ def generate_exponential_random_number(
 
     if isinstance(size, int):
         size = (size,)
-    return torch.distributions.Exponential(1.0 / scale).sample(size).to(device)
+    rate = torch.tensor(1.0 / scale, device=device, dtype=dtype)
+    return torch.distributions.Exponential(rate).sample(size)
 
 
 def generate_gamma_random_number(
@@ -62,6 +65,7 @@ def generate_gamma_random_number(
     scale: float = 1.0,
     size: int | tuple[int, ...] = 1,
     device: torch.device = torch.device("cpu"),
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Generate values from a gamma distribution.
 
@@ -70,6 +74,7 @@ def generate_gamma_random_number(
         scale: Scale parameter.
         size: Shape of the output tensor.
         device: Target device.
+        dtype: Sampling dtype, or None to use the PyTorch default.
 
     Returns:
         Gamma distributed random tensor.
@@ -78,7 +83,9 @@ def generate_gamma_random_number(
 
     if isinstance(size, int):
         size = (size,)
-    return torch.distributions.Gamma(shape, 1.0 / scale).sample(size).to(device)
+    concentration = torch.tensor(shape, device=device, dtype=dtype)
+    rate = torch.tensor(1.0 / scale, device=device, dtype=dtype)
+    return torch.distributions.Gamma(concentration, rate).sample(size)
 
 
 def generate_integer_random_number(

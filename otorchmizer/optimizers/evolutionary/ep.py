@@ -7,6 +7,11 @@ References:
     X. Yao, Y. Liu, and G. Lin.
     Evolutionary programming made faster.
     IEEE Transactions on Evolutionary Computation (1999).
+
+Notes:
+    This implements Gaussian classical evolutionary programming (CEP): offspring positions use the parent's
+    unadapted strategy, while the separately adapted log-normal strategy is inherited after selection. Fast
+    evolutionary programming (FEP) instead uses Cauchy-distributed position mutations and is not implemented here.
 """
 
 from __future__ import annotations
@@ -98,19 +103,29 @@ class EP(Optimizer):
         lb = pop.lb.unsqueeze(0)
         ub = pop.ub.unsqueeze(0)
 
+        n_parameters = pop.n_variables * pop.n_dimensions
+        tau_global = 1 / (2 * n_parameters) ** 0.5
+        tau_local = 1 / (2 * n_parameters**0.5) ** 0.5
+        global_noise = torch.randn(n, 1, 1, device=device, dtype=pop.dtype)
+        local_noise = torch.randn_like(self.strategy)
+        child_strategy = self.strategy * torch.exp(tau_global * global_noise + tau_local * local_noise)
+        strategy_limit = (ub - lb) * self.clip_ratio
+        child_strategy = torch.minimum(child_strategy, strategy_limit)
+
         children = pop.positions + self.strategy * torch.randn_like(pop.positions)
         children = children.clamp(min=lb, max=ub)
-
-        self.strategy = self.strategy + torch.randn_like(self.strategy) * torch.sqrt(self.strategy.abs() + 1e-10)
-        self.strategy = self.strategy.clamp(min=lb, max=ub) * self.clip_ratio
-
         children_fitness = fn(children)
 
         all_pos = torch.cat([pop.positions, children], dim=0)
         all_fit = torch.cat([pop.fitness, children_fitness], dim=0)
+        all_strategy = torch.cat([self.strategy, child_strategy], dim=0)
         total = all_pos.shape[0]
+        best_idx = all_fit.argmin()
+        if all_fit[best_idx] < pop.best_fitness:
+            pop.best_position = all_pos[best_idx].clone()
+            pop.best_fitness = all_fit[best_idx].clone()
 
-        n_bouts = max(int(total * self.bout_size), 1)
+        n_bouts = max(int(n * self.bout_size), 1)
         wins = torch.zeros(total, device=device, dtype=pop.dtype)
 
         for _ in range(n_bouts):
@@ -120,4 +135,4 @@ class EP(Optimizer):
         _, selected = wins.topk(n, largest=True)
         pop.positions = all_pos[selected]
         pop.fitness = all_fit[selected]
-        self.strategy = torch.cat([self.strategy, self.strategy], dim=0)[selected]
+        self.strategy = all_strategy[selected]

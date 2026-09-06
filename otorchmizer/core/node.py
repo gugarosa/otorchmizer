@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import torch
 
-import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
 
 
@@ -236,6 +235,29 @@ class Node:
 
         return result
 
+    def clone(self) -> Node:
+        """Clone this subtree with independent tensors and rebuilt parent links.
+
+        Returns:
+            Independently owned subtree root.
+
+        """
+
+        value = self.value.clone() if self.value is not None else None
+        root = Node(self.name, self.category, value=value)
+
+        if self.left is not None:
+            root.left = self.left.clone()
+            root.left.parent = root
+            root.left.flag = True
+
+        if self.right is not None:
+            root.right = self.right.clone()
+            root.right.parent = root
+            root.right.flag = False
+
+        return root
+
     def find_node(self, position: int) -> tuple[Node | None, bool]:
         """Find a crossover parent and child-side flag by pre-order index.
 
@@ -266,32 +288,74 @@ class Node:
 
 
 def _evaluate(node: Node | None) -> torch.Tensor | None:
-    if node is None:
+    value, valid = _evaluate_node(node)
+    if value is None:
         return None
+    if not value.is_floating_point():
+        return value
 
-    x = _evaluate(node.left)
-    y = _evaluate(node.right)
+    return torch.where(valid, value, torch.full_like(value, torch.nan))
+
+
+def _promoted_float_dtype(*values: torch.Tensor) -> torch.dtype:
+    dtype = values[0].dtype
+    for value in values[1:]:
+        dtype = torch.promote_types(dtype, value.dtype)
+    return dtype if dtype.is_floating_point else torch.get_default_dtype()
+
+
+def _evaluate_node(node: Node | None) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    if node is None:
+        return None, None
+
+    x, x_valid = _evaluate_node(node.left)
+    y, y_valid = _evaluate_node(node.right)
 
     if node.category == "TERMINAL":
-        return node.value
+        return node.value, torch.isfinite(node.value).all()
 
-    ops = {
-        "SUM": lambda a, b: a + b,
-        "SUB": lambda a, b: a - b,
-        "MUL": lambda a, b: a * b,
-        "DIV": lambda a, b: a / (b + c.EPSILON),
-        "EXP": lambda a, _: torch.exp(a),
-        "SQRT": lambda a, _: torch.sqrt(torch.abs(a)),
-        "LOG": lambda a, _: torch.log(torch.abs(a) + c.EPSILON),
-        "ABS": lambda a, _: torch.abs(a),
-        "SIN": lambda a, _: torch.sin(a),
-        "COS": lambda a, _: torch.cos(a),
-    }
+    if x is None:
+        raise e.ValueError("`node.left` should be defined for a function node.")
+    if node.name in ("SUM", "SUB", "MUL", "DIV") and y is None:
+        raise e.ValueError("`node.right` should be defined for a binary function node.")
 
-    if node.name in ops:
-        return ops[node.name](x, y)
+    if node.name == "SUM":
+        result = x + y
+    elif node.name == "SUB":
+        result = x - y
+    elif node.name == "MUL":
+        result = x * y
+    elif node.name == "DIV":
+        dtype = _promoted_float_dtype(x, y)
+        numerator = x.to(dtype=dtype)
+        denominator = y.to(dtype=dtype)
+        denominator = torch.where(
+            torch.abs(denominator) > torch.finfo(dtype).tiny,
+            denominator,
+            torch.ones_like(denominator),
+        )
+        result = numerator / denominator
+    elif node.name == "EXP":
+        result = torch.exp(x)
+    elif node.name == "SQRT":
+        result = torch.sqrt(torch.abs(x))
+    elif node.name == "LOG":
+        dtype = _promoted_float_dtype(x)
+        value = x.to(dtype=dtype)
+        result = torch.log(torch.clamp(torch.abs(value), min=torch.finfo(dtype).tiny))
+    elif node.name == "ABS":
+        result = torch.abs(x)
+    elif node.name == "SIN":
+        result = torch.sin(x)
+    elif node.name == "COS":
+        result = torch.cos(x)
+    else:
+        raise e.ValueError(f"`node.name={node.name}` should identify a supported function.")
 
-    return None
+    valid = x_valid & torch.isfinite(result).all()
+    if y_valid is not None:
+        valid = valid & y_valid
+    return result, valid
 
 
 def _properties(node: Node) -> dict[str, int]:

@@ -5,14 +5,17 @@
 
 from __future__ import annotations
 
+from math import exp, log, sqrt
 from typing import Any
 
 import torch
 
 import otorchmizer.math.general as g
+import otorchmizer.math.random as r
 import otorchmizer.utils.constant as c
 import otorchmizer.utils.exception as e
 from otorchmizer.core.optimizer import Optimizer, UpdateContext
+from otorchmizer.core.population import Population
 from otorchmizer.utils import logging
 
 logger = logging.get_logger(__name__)
@@ -386,7 +389,13 @@ class MVPA(Optimizer):
 
 
 class QSA(Optimizer):
-    """Queuing Search Algorithm."""
+    """Queuing Search Algorithm.
+
+    Notes:
+        Runs all three business phases with greedy acceptance.
+        Queue sizes follow reciprocal positive leader fitness, with equal shares for nonpositive leaders.
+
+    """
 
     def __init__(self, params: dict[str, Any] | None = None) -> None:
         """Initialize the QSA optimizer.
@@ -412,11 +421,27 @@ class QSA(Optimizer):
         if population.n_agents < 3:
             raise e.SizeError("`population.n_agents` must be at least 3 for QSA.")
 
+    def _sort_queues(self, population: Population) -> tuple[torch.Tensor, int, int]:
+        population.sort_by_fitness()
+        fitness = population.fitness[:3]
+        if fitness[0] > 0:
+            weights = fitness[0] / fitness
+            weights /= weights.sum()
+        else:
+            weights = torch.full_like(fitness, 1 / 3)
+
+        first = int((weights[0] * population.n_agents).item())
+        second = first + int((weights[1] * population.n_agents).item())
+        return population.positions[:3].clone(), first, second
+
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one QSA step.
 
         Args:
             ctx: Update context containing the population, objective, and iteration state.
+
+        Raises:
+            ValueError: The population contains non-finite fitness values.
 
         """
 
@@ -424,37 +449,71 @@ class QSA(Optimizer):
         fn = ctx.function
         device = pop.device
         n = pop.n_agents
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
-        t = ctx.iteration + 1
-        T = max(ctx.n_iterations, 1)
+        if not torch.isfinite(pop.fitness).all():
+            raise e.ValueError("`population.fitness` must be finite for QSA queue allocation.")
+        progress = ctx.iteration / max(ctx.n_iterations, 1)
+        beta = exp(log(1 / max(ctx.iteration, c.EPSILON)) * sqrt(progress))
+        shape = (pop.n_variables, pop.n_dimensions)
 
-        import math
-
-        beta = math.exp(math.log(1 / (t + c.EPSILON)) * math.sqrt(t / T))
-
-        sorted_idx = torch.argsort(pop.fitness)
-        pop.positions = pop.positions[sorted_idx]
-        pop.fitness = pop.fitness[sorted_idx]
-
+        leaders, first, second = self._sort_queues(pop)
+        case = 1
         for i in range(n):
-            alpha = torch.rand(1, device=device) * 2 - 1
-            from otorchmizer.math.random import generate_gamma_random_number
+            if i in (0, first, second):
+                case = 1
+            leader = leaders[0 if i < first else 1 if i < second else 2]
+            alpha = 2 * torch.rand((), device=device, dtype=pop.dtype) - 1
+            energy = r.generate_gamma_random_number(1, 0.5, shape, device=device, dtype=pop.dtype)
+            fluctuation = beta * alpha * energy * (leader - pop.positions[i]).abs()
+            if case == 1:
+                jitter = r.generate_gamma_random_number(1, 0.5, 1, device=device, dtype=pop.dtype)
+                candidate = leader + fluctuation + jitter * (leader - pop.positions[i])
+            else:
+                candidate = pop.positions[i] + fluctuation
 
-            E = generate_gamma_random_number(1.0, 0.5, (pop.n_variables, pop.n_dimensions), device)
-            e = generate_gamma_random_number(1.0, 0.5, (1,), device)
+            candidate = candidate.clamp(min=pop.lb, max=pop.ub)
+            fitness = fn(candidate.unsqueeze(0))[0]
+            if fitness < pop.fitness[i]:
+                pop.positions[i] = candidate
+                pop.fitness[i] = fitness
+            else:
+                case = 3 - case
+        pop.update_best()
 
-            # Business 1: move toward top-3
-            idx_target = 0 if i < n // 3 else (1 if i < 2 * n // 3 else min(2, n - 1))
-            A = pop.positions[idx_target]
+        leaders, first, second = self._sort_queues(pop)
+        leader_fitness = pop.fitness[:3] / pop.fitness[:3].abs().max().clamp_min(torch.finfo(pop.dtype).tiny)
+        denominator = leader_fitness[1] + leader_fitness[2]
+        cv = torch.where(denominator != 0, leader_fitness[0] / denominator, torch.zeros_like(denominator))
+        cv = cv.clamp(0, 1)
+        for i in range(n):
+            if torch.rand((), device=device, dtype=pop.dtype) >= (i + 1) / n:
+                continue
+            leader = leaders[0 if i < first else 1 if i < second else 2]
+            donors = pop.positions[torch.randperm(n, device=device)[:2]]
+            coin = torch.rand((), device=device, dtype=pop.dtype)
+            jitter = r.generate_gamma_random_number(1, 0.5, 1, device=device, dtype=pop.dtype)
+            direction = donors[0] - donors[1] if coin < cv else leader - donors[0]
+            candidate = (pop.positions[i] + jitter * direction).clamp(min=pop.lb, max=pop.ub)
+            fitness = fn(candidate.unsqueeze(0))[0]
+            if fitness < pop.fitness[i]:
+                pop.positions[i] = candidate
+                pop.fitness[i] = fitness
+        pop.update_best()
 
-            new_pos = A + beta * alpha * E * torch.abs(A - pop.positions[i]) + e * (A - pop.positions[i])
-            new_pos = new_pos.clamp(min=lb.squeeze(0), max=ub.squeeze(0))
-            new_fit = fn(new_pos.unsqueeze(0))[0]
-
-            if new_fit < pop.fitness[i]:
-                pop.positions[i] = new_pos
-                pop.fitness[i] = new_fit
+        pop.sort_by_fitness()
+        for i in range(n):
+            candidate = pop.positions[i].clone()
+            for variable in range(pop.n_variables):
+                if torch.rand((), device=device, dtype=pop.dtype) >= (i + 1) / n:
+                    continue
+                donors = pop.positions[torch.randperm(n, device=device)[:2]]
+                jitter = r.generate_gamma_random_number(1, 0.5, 1, device=device, dtype=pop.dtype)
+                candidate[variable] = donors[0, variable] + jitter * (donors[1, variable] - candidate[variable])
+                candidate = candidate.clamp(min=pop.lb, max=pop.ub)
+                fitness = fn(candidate.unsqueeze(0))[0]
+                if fitness < pop.fitness[i]:
+                    pop.positions[i] = candidate
+                    pop.fitness[i] = fitness
+        pop.update_best()
 
 
 class SSD(Optimizer):
@@ -466,11 +525,19 @@ class SSD(Optimizer):
         Args:
             params: Algorithm parameter overrides.
 
+        Raises:
+            TypeError: An exploration or decay coefficient is not numeric.
+            ValueError: Exploration is negative or decay is outside [0, 1].
+
         """
 
-        self.c_val = 2.0
+        self.c = 2.0
         self.decay = 0.99
         super().__init__(params)
+        if not isinstance(self.c, (float, int)) or not isinstance(self.decay, (float, int)):
+            raise e.TypeError("`c` and `decay` must be floats or integers.")
+        if self.c < 0 or not 0 <= self.decay <= 1:
+            raise e.ValueError("`c` must be nonnegative and `decay` must be between 0 and 1.")
 
     def compile(self, population) -> None:
         """Initialize optimizer state for a population.
@@ -524,21 +591,21 @@ class SSD(Optimizer):
         mean = (alpha_pos + beta_pos + gamma_pos) / 3
 
         for i in range(n):
-            r1 = torch.rand(1, device=device)
-            r2 = torch.rand(1, device=device)
+            r1 = torch.rand(1, device=device, dtype=pop.dtype)
+            r2 = torch.rand(1, device=device, dtype=pop.dtype)
 
             # Update position
             pop.positions[i] = pop.positions[i] + self.velocity[i]
 
             # Update velocity
             if r2.item() <= 0.5:
-                self.velocity[i] = self.c_val * torch.sin(r1) * (self.local_position[i] - pop.positions[i]) + torch.sin(
+                self.velocity[i] = self.c * torch.sin(r1) * (self.local_position[i] - pop.positions[i]) + torch.sin(
                     r1
                 ) * (mean - pop.positions[i])
             else:
-                self.velocity[i] = self.c_val * torch.cos(r1) * (self.local_position[i] - pop.positions[i]) + torch.cos(
+                self.velocity[i] = self.c * torch.cos(r1) * (self.local_position[i] - pop.positions[i]) + torch.cos(
                     r1
                 ) * (mean - pop.positions[i])
 
         pop.positions = pop.positions.clamp(min=lb, max=ub)
-        self.c_val *= self.decay
+        self.c *= self.decay

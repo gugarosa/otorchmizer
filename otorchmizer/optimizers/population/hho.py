@@ -87,7 +87,7 @@ class HHO(Optimizer):
                     if E.abs().item() >= 0.5:
                         Y = best.squeeze(0) - E.abs() * torch.abs(J * best.squeeze(0) - pop.positions[i])
                         S = torch.rand_like(Y)
-                        levy = d.generate_levy_distribution(beta=1.5, size=Y.shape, device=device).to(pop.dtype)
+                        levy = d.generate_levy_distribution(beta=1.5, size=Y.shape, device=device, dtype=pop.dtype)
                         Z = Y + S * levy
 
                         Y_fit = fn(Y.clamp(min=lb.squeeze(0), max=ub.squeeze(0)).unsqueeze(0))[0]
@@ -102,7 +102,7 @@ class HHO(Optimizer):
                     else:
                         Y = best.squeeze(0) - E.abs() * torch.abs(J * best.squeeze(0) - avg.squeeze(0))
                         S = torch.rand_like(Y)
-                        levy = d.generate_levy_distribution(beta=1.5, size=Y.shape, device=device).to(pop.dtype)
+                        levy = d.generate_levy_distribution(beta=1.5, size=Y.shape, device=device, dtype=pop.dtype)
                         Z = Y + S * levy
 
                         Y_fit = fn(Y.clamp(min=lb.squeeze(0), max=ub.squeeze(0)).unsqueeze(0))[0]

@@ -49,7 +49,7 @@ class Optimizer:
     """Base class for all optimization algorithms.
 
     Notes:
-        Subclasses must implement update(ctx) and may override evaluate() and compile().
+        Subclasses must implement update(ctx) and may override bind(), validate_space(), evaluate(), and compile().
 
     """
 
@@ -123,6 +123,49 @@ class Optimizer:
             str(params),
             self.built,
         )
+
+    def bind(self, space: Space) -> None:
+        """Binds optional space-owned state before optimizer compilation.
+
+        Args:
+            space: Built search space used by the optimization engine.
+
+        Notes:
+            The base implementation does nothing. Structural optimizers can override this hook when their state
+            cannot be represented by the population tensors accepted by compile() and evaluate().
+
+        """
+
+        pass
+
+    def validate_space(self, space: Space) -> None:
+        """Validate optimizer-specific space invariants at lifecycle boundaries.
+
+        Args:
+            space: Search space about to enter or leave an engine lifecycle stage.
+
+        Notes:
+            The base implementation does nothing. Structural optimizers can reject external state changes that
+            cannot be represented by their genotype.
+
+        """
+
+        pass
+
+    def rebind(self, space: Space) -> None:
+        """Rebind and recompile the optimizer after replacing or transferring its space.
+
+        Args:
+            space: Built search space defining the optimizer state.
+
+        Notes:
+            Any torch.compile dispatch is invalidated before bind() and compile() rebuild optimizer state.
+
+        """
+
+        self._compiled_update = None
+        self.bind(space)
+        self.compile(space.population)
 
     def compile(self, population: Population) -> None:
         """Pre-allocates algorithm-specific state tensors.

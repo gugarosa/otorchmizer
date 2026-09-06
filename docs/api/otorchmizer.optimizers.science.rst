@@ -13,6 +13,7 @@ Science-inspired optimizers draw from physics, chemistry, and astronomy — grav
     otorchmizer.optimizers.science.science_extra
     otorchmizer.optimizers.science.wca
     otorchmizer.optimizers.science.wdo
+    otorchmizer.optimizers.science.wwo
 
 .. automodule:: otorchmizer.optimizers.science
    :members:

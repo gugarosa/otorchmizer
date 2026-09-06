@@ -9,6 +9,7 @@ Miscellaneous optimizers that do not fit neatly into other categories, including
     otorchmizer.optimizers.misc.doa
     otorchmizer.optimizers.misc.gs
     otorchmizer.optimizers.misc.hc
+    otorchmizer.optimizers.misc.nds
 
 .. automodule:: otorchmizer.optimizers.misc
    :members:

@@ -31,6 +31,7 @@ class ParetoSpace(Space):
 
         Notes:
             Agents are initialized from `data_points` instead of random samples, and bound clipping is disabled.
+            Floating-point data retains its input dtype.
 
         """
 
@@ -48,6 +49,8 @@ class ParetoSpace(Space):
             device=device,
         )
 
+        if data_points.is_floating_point():
+            self.population.to(self.device, dtype=data_points.dtype)
         self._data_points = data_points.to(self.device)
         self.build()
 

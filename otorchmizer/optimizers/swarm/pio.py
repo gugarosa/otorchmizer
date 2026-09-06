@@ -5,8 +5,7 @@
 
 References:
     H. Duan and P. Qiao.
-    Pigeon-inspired optimization: a new swarm intelligence optimizer
-    for air robot path planning.
+    Pigeon-inspired optimization: A new swarm intelligence optimizer for air robot path planning.
     International Journal of Intelligent Computing and Cybernetics (2014).
 
 """
@@ -28,7 +27,8 @@ class PIO(Optimizer):
     """Pigeon-Inspired Optimization.
 
     Notes:
-        Map & compass operator + landmark operator.
+        The landmark center retains the reference algorithm's extra active-pigeon divisor.
+        An exact zero fitness sum uses ``active_mean / n_p``, matching the limit for equal positive weights.
 
     """
 
@@ -42,7 +42,8 @@ class PIO(Optimizer):
 
         logger.info("Overriding class: Optimizer -> PIO.")
 
-        self.n_c = 0.0
+        self._n_c1 = 150
+        self._n_c2 = 200
         self.R = 0.2
 
         super().__init__(params)
@@ -50,20 +51,59 @@ class PIO(Optimizer):
         logger.info("Class overrided.")
 
     @property
-    def n_c(self) -> float:
-        """Return the phase-control coefficient."""
+    def n_c1(self) -> int:
+        """Return the final map-and-compass iteration."""
 
-        return self._n_c
+        return self._n_c1
 
-    @n_c.setter
-    def n_c(self, n_c: float) -> None:
-        if not isinstance(n_c, (float, int)):
-            raise e.TypeError("`n_c` must be a float or integer.")
-        self._n_c = n_c
+    @n_c1.setter
+    def n_c1(self, n_c1: int) -> None:
+        self._validate_thresholds(n_c1, self.n_c2)
+        self._n_c1 = n_c1
+
+    @property
+    def n_c2(self) -> int:
+        """Return the final landmark iteration."""
+
+        return self._n_c2
+
+    @n_c2.setter
+    def n_c2(self, n_c2: int) -> None:
+        self._validate_thresholds(self.n_c1, n_c2)
+        self._n_c2 = n_c2
+
+    @staticmethod
+    def _validate_thresholds(n_c1: int, n_c2: int) -> None:
+        if not isinstance(n_c1, int):
+            raise e.TypeError("`n_c1` must be an integer.")
+        if not isinstance(n_c2, int):
+            raise e.TypeError("`n_c2` must be an integer.")
+        if n_c1 <= 0:
+            raise e.ValueError("`n_c1` must be positive.")
+        if n_c2 < n_c1:
+            raise e.ValueError("`n_c2` must be greater than or equal to `n_c1`.")
+
+    def build(self, params: dict[str, Any] | None = None) -> None:
+        """Apply parameter overrides without transiently invalid phase thresholds.
+
+        Args:
+            params: Attribute overrides applied to the optimizer.
+
+        """
+
+        supplied = dict(params or {})
+        n_c1 = supplied.pop("n_c1", self.n_c1)
+        n_c2 = supplied.pop("n_c2", self.n_c2)
+        self._validate_thresholds(n_c1, n_c2)
+
+        super().build(supplied)
+        self._n_c1, self._n_c2 = n_c1, n_c2
+        if params:
+            self.params.update({name: value for name, value in (("n_c1", n_c1), ("n_c2", n_c2)) if name in params})
 
     @property
     def R(self) -> float:
-        """Return the map-and-compass factor."""
+        """Return the map-and-compass decay factor."""
 
         return self._R
 
@@ -71,18 +111,34 @@ class PIO(Optimizer):
     def R(self, R: float) -> None:
         if not isinstance(R, (float, int)):
             raise e.TypeError("`R` must be a float or integer.")
+        if R < 0:
+            raise e.ValueError("`R` must be non-negative.")
         self._R = R
 
+    @property
+    def n_p(self) -> int:
+        """Return the active pigeon count."""
+
+        return self._n_p
+
+    @n_p.setter
+    def n_p(self, n_p: int) -> None:
+        if not isinstance(n_p, int):
+            raise e.TypeError("`n_p` must be an integer.")
+        if n_p <= 0:
+            raise e.ValueError("`n_p` must be positive.")
+        self._n_p = n_p
+
     def compile(self, population) -> None:
-        """Initialize persistent optimizer state.
+        """Initialize velocity and the active pigeon count.
 
         Args:
             population: Population that defines the state shape, device, and dtype.
 
         """
 
-        shape = (population.n_agents, population.n_variables, population.n_dimensions)
-        self.velocity = torch.zeros(shape, device=population.device, dtype=population.dtype)
+        self.n_p = population.n_agents
+        self.velocity = torch.zeros_like(population.positions)
 
     def update(self, ctx: UpdateContext) -> None:
         """Advance the population by one optimization step.
@@ -93,26 +149,43 @@ class PIO(Optimizer):
         """
 
         pop = ctx.space.population
-        device = pop.device
-        n = pop.n_agents
         best = pop.best_position.unsqueeze(0)
-        t = ctx.iteration / max(ctx.n_iterations, 1)
 
-        if t < 0.5:
-            r = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-            decay = pop.positions.new_tensor(-self.R * (ctx.iteration + 1))
-            self.velocity = self.velocity * torch.exp(decay) + r * (best - pop.positions)
+        if ctx.iteration < self.n_c1:
+            random = torch.rand(
+                pop.n_agents,
+                1,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
+            )
+            decay = pop.positions.new_tensor(-self.R * (ctx.iteration + 1)).exp()
+            self.velocity = self.velocity * decay + random * (best - pop.positions)
             pop.positions = pop.positions + self.velocity
-        else:
-            sorted_idx = torch.argsort(pop.fitness)
-            n_active = max(int(n * (1 - t)), 2)
-
-            top_positions = pop.positions[sorted_idx[:n_active]]
-            top_fitness = pop.fitness[sorted_idx[:n_active]]
-
-            weights = 1.0 / (top_fitness + 1e-10)
-            weights = weights / weights.sum()
-            center = (weights.view(-1, 1, 1) * top_positions).sum(dim=0, keepdim=True)
-
-            r = torch.rand(n, 1, 1, device=device, dtype=pop.dtype)
-            pop.positions = pop.positions + r * (center - pop.positions)
+        elif ctx.iteration < self.n_c2:
+            if not torch.isfinite(pop.fitness).all():
+                raise e.ValueError("`population.fitness` must contain only finite values.")
+            self.n_p = min(self.n_p // 2 + 1, pop.n_agents)
+            order = torch.argsort(pop.fitness)
+            active_positions = pop.positions[order[: self.n_p]]
+            active_fitness = pop.fitness[order[: self.n_p]]
+            scale = active_fitness.abs().max()
+            if scale == 0:
+                center = active_positions.mean(dim=0) / self.n_p
+            else:
+                normalized_fitness = active_fitness / scale
+                fitness_sum = normalized_fitness.sum()
+                if fitness_sum == 0:
+                    center = active_positions.mean(dim=0) / self.n_p
+                else:
+                    center = (active_positions * normalized_fitness.view(-1, 1, 1)).sum(dim=0) / (
+                        self.n_p * fitness_sum
+                    )
+            random = torch.rand(
+                pop.n_agents,
+                1,
+                1,
+                device=pop.device,
+                dtype=pop.dtype,
+            )
+            pop.positions = pop.positions + random * (center.unsqueeze(0) - pop.positions)

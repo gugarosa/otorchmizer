@@ -9,6 +9,8 @@ from otorchmizer.optimizers.evolutionary.ep import EP
 from otorchmizer.optimizers.evolutionary.es import ES
 from otorchmizer.optimizers.evolutionary.foa import FOA
 from otorchmizer.optimizers.evolutionary.ga import GA
+from otorchmizer.optimizers.evolutionary.gp import GP
+from otorchmizer.optimizers.evolutionary.gsgp import GSGP
 from otorchmizer.optimizers.evolutionary.hs import GHS, GOGHS, HS, IHS, NGHS, SGHS
 from otorchmizer.optimizers.evolutionary.iwo import IWO
 from otorchmizer.optimizers.evolutionary.rra import RRA
@@ -20,8 +22,10 @@ __all__ = [
     "ES",
     "FOA",
     "GA",
+    "GP",
     "GHS",
     "GOGHS",
+    "GSGP",
     "HS",
     "IHS",
     "IWO",

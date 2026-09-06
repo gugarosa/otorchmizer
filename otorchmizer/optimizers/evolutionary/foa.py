@@ -125,8 +125,83 @@ class FOA(Optimizer):
 
         self.age = torch.zeros(population.n_agents, dtype=torch.long, device=population.device)
 
+    def _local_seeding(self, pop, function) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        young_idx = (self.age == 0).nonzero(as_tuple=True)[0]
+        parent_age = self.age + 1
+        if young_idx.numel() == 0:
+            return pop.positions, pop.fitness, parent_age
+
+        parent_idx = young_idx.repeat_interleave(self.LSC)
+        children = pop.positions[parent_idx].clone()
+        variables = torch.randint(
+            0,
+            pop.n_variables,
+            (children.shape[0],),
+            device=pop.device,
+        )
+        rows = torch.arange(children.shape[0], device=pop.device)
+        child_lb = pop.lb[variables]
+        child_ub = pop.ub[variables]
+        children[rows, variables] += torch.rand_like(child_lb) * (child_ub - child_lb) + child_lb
+        children = children.clamp(min=pop.lb.unsqueeze(0), max=pop.ub.unsqueeze(0))
+        children_fitness = function(children)
+
+        positions = torch.cat((pop.positions, children))
+        fitness = torch.cat((pop.fitness, children_fitness))
+        age = torch.cat(
+            (
+                parent_age,
+                torch.zeros(children.shape[0], dtype=torch.long, device=pop.device),
+            )
+        )
+        return positions, fitness, age
+
+    def _limit_population(
+        self,
+        positions: torch.Tensor,
+        fitness: torch.Tensor,
+        age: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        alive = age < self.life_time
+        candidate_positions = positions[~alive]
+        positions = positions[alive]
+        fitness = fitness[alive]
+        age = age[alive]
+
+        sorted_idx = torch.argsort(fitness)
+        positions = positions[sorted_idx]
+        fitness = fitness[sorted_idx]
+        age = age[sorted_idx]
+
+        if positions.shape[0] > self.area_limit:
+            candidate_positions = torch.cat((candidate_positions, positions[self.area_limit :]))
+            positions = positions[: self.area_limit]
+            fitness = fitness[: self.area_limit]
+            age = age[: self.area_limit]
+
+        return positions, fitness, age, candidate_positions
+
+    def _global_seeding(self, pop, function, candidates: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        n_global = int(candidates.shape[0] * self.transfer_rate)
+        if n_global == 0:
+            return (
+                pop.positions.new_empty((0, pop.n_variables, pop.n_dimensions)),
+                pop.fitness.new_empty((0,)),
+            )
+
+        seeds = candidates[:n_global].clone()
+        rows = torch.arange(n_global, device=pop.device)
+        for _ in range(self.GSC):
+            variables = torch.randint(0, pop.n_variables, (n_global,), device=pop.device)
+            seed_lb = pop.lb[variables]
+            seed_ub = pop.ub[variables]
+            seeds[rows, variables] = torch.rand_like(seed_lb) * (seed_ub - seed_lb) + seed_lb
+
+        seeds_fitness = function(seeds)
+        return seeds, seeds_fitness
+
     def update(self, ctx: UpdateContext) -> None:
-        """Seed young trees, remove old trees, and restore population size.
+        """Run local seeding, population limiting, and global seeding.
 
         Args:
             ctx: Current optimization state and objective.
@@ -135,75 +210,23 @@ class FOA(Optimizer):
 
         pop = ctx.space.population
         fn = ctx.function
-        device = pop.device
-        n = pop.n_agents
-        lb = pop.lb.unsqueeze(0)
-        ub = pop.ub.unsqueeze(0)
 
-        # Seed every zero-aged tree locally
-        young_mask = self.age == 0
-        young_idx = young_mask.nonzero(as_tuple=True)[0]
+        positions, fitness, age = self._local_seeding(pop, fn)
+        positions, fitness, age, candidates = self._limit_population(positions, fitness, age)
+        global_seeds, global_fitness = self._global_seeding(pop, fn, candidates)
 
-        new_positions_list = []
-
-        for idx in young_idx:
-            for _ in range(self.LSC):
-                offspring = pop.positions[idx].clone()
-                j = torch.randint(0, pop.n_variables, (1,), device=device).item()
-                offspring[j] = (
-                    torch.rand(pop.n_dimensions, device=device, dtype=pop.dtype) * (ub.squeeze(0)[j] - lb.squeeze(0)[j])
-                    + lb.squeeze(0)[j]
-                )
-                new_positions_list.append(offspring)
-
-        if new_positions_list:
-            new_pos = torch.stack(new_positions_list)
-            new_fit = fn(new_pos)
-            all_pos = torch.cat([pop.positions, new_pos], dim=0)
-            all_fit = torch.cat([pop.fitness, new_fit], dim=0)
-            all_age = torch.cat([self.age, torch.zeros(new_pos.shape[0], dtype=torch.long, device=device)])
-        else:
-            all_pos = pop.positions
-            all_fit = pop.fitness
-            all_age = self.age
-
-        all_age = all_age + 1
-
-        alive = all_age <= self.life_time
-        all_pos = all_pos[alive]
-        all_fit = all_fit[alive]
-        all_age = all_age[alive]
-
-        sorted_idx = torch.argsort(all_fit)
-        keep = min(max(self.area_limit, n), all_pos.shape[0])
-        all_pos = all_pos[sorted_idx[:keep]]
-        all_fit = all_fit[sorted_idx[:keep]]
-        all_age = all_age[sorted_idx[:keep]]
-
-        all_age[0] = 0
-
-        if all_pos.shape[0] < n:
-            deficit = n - all_pos.shape[0]
-            new_random = (
-                torch.rand(
-                    deficit,
-                    pop.n_variables,
-                    pop.n_dimensions,
-                    device=device,
-                    dtype=pop.dtype,
-                )
-                * (ub - lb)
-                + lb
+        positions = torch.cat((positions, global_seeds))
+        fitness = torch.cat((fitness, global_fitness))
+        age = torch.cat(
+            (
+                age,
+                torch.zeros(global_seeds.shape[0], dtype=torch.long, device=pop.device),
             )
-            new_random_fit = fn(new_random)
-            all_pos = torch.cat([all_pos, new_random], dim=0)
-            all_fit = torch.cat([all_fit, new_random_fit], dim=0)
-            all_age = torch.cat([all_age, torch.zeros(deficit, dtype=torch.long, device=device)])
-        elif all_pos.shape[0] > n:
-            all_pos = all_pos[:n]
-            all_fit = all_fit[:n]
-            all_age = all_age[:n]
-
-        pop.positions = all_pos
-        pop.fitness = all_fit
-        self.age = all_age
+        )
+        sorted_idx = torch.argsort(fitness)
+        pop.positions = positions[sorted_idx]
+        pop.fitness = fitness[sorted_idx]
+        self.age = age[sorted_idx]
+        self.age[0] = 0
+        pop.n_agents = pop.positions.shape[0]
+        pop.update_best()
