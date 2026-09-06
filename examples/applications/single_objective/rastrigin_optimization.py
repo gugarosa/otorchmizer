@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer import Otorchmizer
@@ -9,8 +12,18 @@ torch.manual_seed(0)
 
 
 def rastrigin(x):
+    """Compute the Rastrigin objective for one candidate.
+
+    Args:
+        x: Candidate position tensor.
+
+    Returns:
+        Scalar Rastrigin fitness.
+
+    """
+
     n = x.shape[0]
-    return 10 * n + (x ** 2 - 10 * torch.cos(2 * torch.pi * x)).sum(dim=(-1, -2))
+    return 10 * n + (x**2 - 10 * torch.cos(2 * torch.pi * x)).sum(dim=(-1, -2))
 
 
 # Number of agents and decision variables
@@ -22,8 +35,9 @@ lower_bound = [-5.12] * n_variables
 upper_bound = [5.12] * n_variables
 
 # Creates the space, optimizer and function
-space = Space(n_agents=n_agents, n_variables=n_variables,
-              lower_bound=lower_bound, upper_bound=upper_bound, device="cpu")
+space = Space(
+    n_agents=n_agents, n_variables=n_variables, lower_bound=lower_bound, upper_bound=upper_bound, device="cpu"
+)
 space.build()
 optimizer = FA(params={"alpha": 0.5, "beta": 0.2, "gamma": 1.0})
 function = Function(rastrigin)

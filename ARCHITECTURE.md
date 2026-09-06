@@ -1,5 +1,10 @@
 # Otorchmizer — PyTorch Migration Architecture Guide
 
+> **Historical design document:** this records the migration plan, not a guarantee
+> that every proposed feature or speedup is implemented. Current API documentation
+> and executable behavior take precedence. In particular, GPU and compilation
+> support are workload-dependent, and `GraphSpace` remains experimental.
+
 > **Target:** Migrate Opytimizer (v3.1.4) to a PyTorch-native meta-heuristic optimization framework.
 > **Goal:** Replace NumPy with PyTorch tensors, enable GPU/Multi-GPU acceleration, and modernize the architecture while preserving algorithmic correctness.
 
@@ -129,21 +134,16 @@ handles a subset of agents:
 class MultiGPUPopulation:
     """Splits population across available GPUs for large-scale optimization."""
 
-    def __init__(self, n_agents: int, n_variables: int, n_dimensions: int,
-                 devices: list[torch.device]):
+    def __init__(self, n_agents: int, n_variables: int, n_dimensions: int, devices: list[torch.device]):
         self.devices = devices
         n_per_gpu = n_agents // len(devices)
 
         # Each GPU holds a shard of the population
-        self.shards = [
-            Population(n_per_gpu, n_variables, n_dimensions, device=dev)
-            for dev in devices
-        ]
+        self.shards = [Population(n_per_gpu, n_variables, n_dimensions, device=dev) for dev in devices]
 
     def gather_best(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Finds global best across all GPU shards."""
-        bests = [(s.best_fitness.to("cpu"), s.best_position.to("cpu"))
-                 for s in self.shards]
+        bests = [(s.best_fitness.to("cpu"), s.best_position.to("cpu")) for s in self.shards]
         idx = torch.stack([b[0] for b in bests]).argmin()
         return bests[idx]
 ```
@@ -177,9 +177,15 @@ class Population:
     everything is a single batched tensor for GPU-friendly access.
     """
 
-    def __init__(self, n_agents: int, n_variables: int, n_dimensions: int,
-                 lower_bound: torch.Tensor, upper_bound: torch.Tensor,
-                 device: torch.device = torch.device("cpu")):
+    def __init__(
+        self,
+        n_agents: int,
+        n_variables: int,
+        n_dimensions: int,
+        lower_bound: torch.Tensor,
+        upper_bound: torch.Tensor,
+        device: torch.device = torch.device("cpu"),
+    ):
         self.device = device
         self.n_agents = n_agents
         self.n_variables = n_variables
@@ -187,7 +193,7 @@ class Population:
 
         # Core population tensors — ALL agents in one contiguous block
         self.positions = torch.zeros(n_agents, n_variables, n_dimensions, device=device)
-        self.fitness   = torch.full((n_agents,), float("inf"), device=device)
+        self.fitness = torch.full((n_agents,), float("inf"), device=device)
 
         # Bounds as tensors (broadcastable)
         self.lb = lower_bound.to(device)  # (n_variables,) or (n_variables, 1)
@@ -195,7 +201,7 @@ class Population:
 
         # Global best (single candidate)
         self.best_position = torch.zeros(n_variables, n_dimensions, device=device)
-        self.best_fitness  = torch.tensor(float("inf"), device=device)
+        self.best_fitness = torch.tensor(float("inf"), device=device)
 
     def clip(self) -> None:
         """Clamp all positions to bounds — fully vectorized."""
@@ -273,6 +279,7 @@ class UpdateContext:
     Every optimizer receives the same context — use what you need, ignore the rest.
     Eliminates the fragile inspect.signature() dynamic wiring.
     """
+
     space: "Space"
     function: "Function"
     iteration: int
@@ -362,18 +369,22 @@ class Function:
 class Space:
     """Base search space managing a Population of candidates."""
 
-    def __init__(self, n_agents: int, n_variables: int, n_dimensions: int,
-                 lower_bound: list[float], upper_bound: list[float],
-                 mapping: list[str] | None = None,
-                 device: str | torch.device = "auto"):
+    def __init__(
+        self,
+        n_agents: int,
+        n_variables: int,
+        n_dimensions: int,
+        lower_bound: list[float],
+        upper_bound: list[float],
+        mapping: list[str] | None = None,
+        device: str | torch.device = "auto",
+    ):
         self.device = DeviceManager(device).device
 
         lb = torch.tensor(lower_bound, dtype=torch.float32)
         ub = torch.tensor(upper_bound, dtype=torch.float32)
 
-        self.population = Population(
-            n_agents, n_variables, n_dimensions, lb, ub, self.device
-        )
+        self.population = Population(n_agents, n_variables, n_dimensions, lb, ub, self.device)
         self.mapping = mapping or [f"x{i}" for i in range(n_variables)]
         self.built = False
 
@@ -434,8 +445,7 @@ All spaces become thin wrappers around `Space` with different `_initialize()`:
 ```python
 class GridSpace(Space):
     def _create_grid(self) -> None:
-        ranges = [torch.arange(lb, ub + s, s, device=self.device)
-                  for lb, ub, s in zip(self.lb, self.ub, self.step)]
+        ranges = [torch.arange(lb, ub + s, s, device=self.device) for lb, ub, s in zip(self.lb, self.ub, self.step)]
         mesh = torch.meshgrid(*ranges, indexing="ij")
         self.population.positions = torch.stack([m.ravel() for m in mesh], dim=1).unsqueeze(-1)
         self.population.n_agents = self.population.positions.shape[0]
@@ -453,8 +463,7 @@ See Section 4.5. The key change is `torch.vmap` auto-batching.
 
 ```python
 class ConstrainedFunction(Function):
-    def __init__(self, pointer: callable, constraints: list[callable],
-                 penalty: float = 0.0, batch: bool = False):
+    def __init__(self, pointer: callable, constraints: list[callable], penalty: float = 0.0, batch: bool = False):
         super().__init__(pointer, batch)
         self.constraints = constraints
         self.penalty = penalty
@@ -511,9 +520,11 @@ specific vectorization strategy:
 ```python
 for i, agent in enumerate(space.agents):
     r1 = r.generate_uniform_random_number()
-    self.velocity[i] = (self.w * self.velocity[i]
-                       + self.c1 * r1 * (self.local_position[i] - agent.position)
-                       + self.c2 * r2 * (space.best_agent.position - agent.position))
+    self.velocity[i] = (
+        self.w * self.velocity[i]
+        + self.c1 * r1 * (self.local_position[i] - agent.position)
+        + self.c2 * r2 * (space.best_agent.position - agent.position)
+    )
     agent.position += self.velocity[i]
 ```
 
@@ -524,9 +535,11 @@ def update(self, ctx: UpdateContext) -> None:
     r1 = torch.rand(pop.n_agents, 1, 1, device=pop.device)
     r2 = torch.rand(pop.n_agents, 1, 1, device=pop.device)
 
-    self.velocity = (self.w * self.velocity
-                    + self.c1 * r1 * (self.local_position - pop.positions)
-                    + self.c2 * r2 * (pop.best_position.unsqueeze(0) - pop.positions))
+    self.velocity = (
+        self.w * self.velocity
+        + self.c1 * r1 * (self.local_position - pop.positions)
+        + self.c2 * r2 * (pop.best_position.unsqueeze(0) - pop.positions)
+    )
     pop.positions += self.velocity
 ```
 
@@ -573,12 +586,12 @@ def update(self, ctx: UpdateContext) -> None:
     dist_matrix = torch.cdist(pos_flat, pos_flat)  # Single GPU-optimized call
 
     # Attractiveness matrix: (n_agents, n_agents)
-    beta_matrix = self.beta * torch.exp(-self.gamma * dist_matrix ** 2)
+    beta_matrix = self.beta * torch.exp(-self.gamma * dist_matrix**2)
 
     # Mask: only move toward brighter (lower fitness) fireflies
     fit_i = pop.fitness.unsqueeze(1)  # (n, 1)
     fit_j = pop.fitness.unsqueeze(0)  # (1, n)
-    mask = (fit_j < fit_i).float()    # (n, n) — 1 where j is better than i
+    mask = (fit_j < fit_i).float()  # (n, n) — 1 where j is better than i
 
     # Position differences: (n_agents, n_agents, n_vars * n_dims)
     diff = pos_flat.unsqueeze(1) - pos_flat.unsqueeze(0)  # (n, n, d)
@@ -605,7 +618,7 @@ selected = torch.multinomial(probs, n_selected, replacement=False)
 # Batch crossover for all pairs simultaneously
 r = torch.rand(n_pairs, n_variables, 1, device=device)
 alpha = r * parents_a + (1 - r) * parents_b
-beta  = r * parents_b + (1 - r) * parents_a
+beta = r * parents_b + (1 - r) * parents_a
 ```
 
 **Mutation** (Gaussian):
@@ -689,28 +702,27 @@ All random generators become GPU-native and support batched generation:
 
 ```python
 def generate_uniform_random_number(
-    low: float = 0.0, high: float = 1.0,
-    size: int | tuple = 1,
-    device: torch.device = torch.device("cpu")
+    low: float = 0.0, high: float = 1.0, size: int | tuple = 1, device: torch.device = torch.device("cpu")
 ) -> torch.Tensor:
     if isinstance(size, int):
         size = (size,)
     return torch.rand(size, device=device) * (high - low) + low
 
+
 def generate_gaussian_random_number(
-    mean: float = 0.0, variance: float = 1.0,
-    size: int | tuple = 1,
-    device: torch.device = torch.device("cpu")
+    mean: float = 0.0, variance: float = 1.0, size: int | tuple = 1, device: torch.device = torch.device("cpu")
 ) -> torch.Tensor:
     if isinstance(size, int):
         size = (size,)
     return torch.randn(size, device=device) * variance + mean
 
+
 def generate_integer_random_number(
-    low: int = 0, high: int = 1,
+    low: int = 0,
+    high: int = 1,
     size: int | tuple | None = None,
     exclude_value: int | None = None,
-    device: torch.device = torch.device("cpu")
+    device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
     if size is None:
         result = torch.randint(low, high, (1,), device=device).item()
@@ -720,10 +732,8 @@ def generate_integer_random_number(
         result = torch.randint(low, high, size, device=device)
     return result
 
-def generate_binary_random_number(
-    size: int = 1,
-    device: torch.device = torch.device("cpu")
-) -> torch.Tensor:
+
+def generate_binary_random_number(size: int = 1, device: torch.device = torch.device("cpu")) -> torch.Tensor:
     return torch.round(torch.rand(size, device=device))
 ```
 
@@ -737,9 +747,9 @@ iteration — this becomes a single batched call for the entire population.
 import torch
 import torch.distributions as dist
 
+
 def generate_levy_distribution(
-    beta: float = 0.1, size: int | tuple = 1,
-    device: torch.device = torch.device("cpu")
+    beta: float = 0.1, size: int | tuple = 1, device: torch.device = torch.device("cpu")
 ) -> torch.Tensor:
     from math import gamma, pi, sin
 
@@ -755,17 +765,16 @@ def generate_levy_distribution(
 
     return u / torch.abs(v) ** (1 / beta)
 
+
 def generate_bernoulli_distribution(
-    prob: float = 0.0, size: int | tuple = 1,
-    device: torch.device = torch.device("cpu")
+    prob: float = 0.0, size: int | tuple = 1, device: torch.device = torch.device("cpu")
 ) -> torch.Tensor:
     if isinstance(size, int):
         size = (size,)
     return torch.bernoulli(torch.full(size, prob, device=device))
 
-def generate_choice_distribution(
-    n: int, probs: torch.Tensor, size: int
-) -> torch.Tensor:
+
+def generate_choice_distribution(n: int, probs: torch.Tensor, size: int) -> torch.Tensor:
     return torch.multinomial(probs, size, replacement=False)
 ```
 
@@ -776,13 +785,14 @@ def euclidean_distance(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """Batched euclidean distance."""
     return torch.linalg.norm(x - y, dim=-1)
 
+
 def pairwise_distances(positions: torch.Tensor) -> torch.Tensor:
     """Full pairwise distance matrix — replaces nested loops in FA/GOA/KH."""
     flat = positions.view(positions.shape[0], -1)
     return torch.cdist(flat, flat)
 
-def kmeans_torch(x: torch.Tensor, n_clusters: int,
-                 max_iterations: int = 100, tol: float = 1e-4) -> torch.Tensor:
+
+def kmeans_torch(x: torch.Tensor, n_clusters: int, max_iterations: int = 100, tol: float = 1e-4) -> torch.Tensor:
     """GPU-accelerated K-means."""
     n_samples = x.shape[0]
     flat = x.view(n_samples, -1)
@@ -808,8 +818,8 @@ def kmeans_torch(x: torch.Tensor, n_clusters: int,
 
     return labels
 
-def tournament_selection(fitness: torch.Tensor, n: int,
-                          size: int = 2) -> torch.Tensor:
+
+def tournament_selection(fitness: torch.Tensor, n: int, size: int = 2) -> torch.Tensor:
     """Vectorized tournament selection."""
     device = fitness.device
     # Draw `size` random candidates for each of `n` tournaments
@@ -824,6 +834,7 @@ def tournament_selection(fitness: torch.Tensor, n: int,
 ```python
 def norm(array: torch.Tensor) -> torch.Tensor:
     return torch.linalg.norm(array, dim=1)
+
 
 def span(array: torch.Tensor, lb: torch.Tensor, ub: torch.Tensor) -> torch.Tensor:
     n = norm(array) / (array.shape[1] ** 0.5)
@@ -840,7 +851,7 @@ def span(array: torch.Tensor, lb: torch.Tensor, ub: torch.Tensor) -> torch.Tenso
 EPSILON = 1e-32
 FLOAT_MAX = float("inf")  # Use torch-compatible infinity
 LIGHT_SPEED = 3e5
-FUNCTION_N_ARGS = { ... }  # Unchanged (GP-specific)
+FUNCTION_N_ARGS = {...}  # Unchanged (GP-specific)
 TEST_EPSILON = 100
 ```
 
@@ -876,6 +887,7 @@ class Callback:
     def on_evaluate_before(self, population: Population, function: Function) -> None: ...
     def on_update_before(self, ctx: UpdateContext) -> None: ...
     def on_update_after(self, ctx: UpdateContext) -> None: ...
+
 
 class DiscreteSearchCallback(Callback):
     def on_evaluate_before(self, population: Population, function: Function) -> None:
@@ -956,9 +968,7 @@ class PSO(Optimizer):
     def _update_positions_impl(self, positions, velocity, local_pos, best_pos, w, c1, c2):
         r1 = torch.rand_like(positions)
         r2 = torch.rand_like(positions)
-        velocity = (w * velocity
-                   + c1 * r1 * (local_pos - positions)
-                   + c2 * r2 * (best_pos.unsqueeze(0) - positions))
+        velocity = w * velocity + c1 * r1 * (local_pos - positions) + c2 * r2 * (best_pos.unsqueeze(0) - positions)
         return positions + velocity, velocity
 ```
 
@@ -1104,11 +1114,7 @@ def test_pso_correctness():
     # Run otorchmizer
     new_result = run_otorchmizer_pso(seed=42, device="cpu")
 
-    assert torch.allclose(
-        torch.tensor(orig_result.best_position),
-        new_result.best_position.cpu(),
-        atol=1e-5
-    )
+    assert torch.allclose(torch.tensor(orig_result.best_position), new_result.best_position.cpu(), atol=1e-5)
 ```
 
 ### 14.2 Device Parity Tests

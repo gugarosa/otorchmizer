@@ -1,7 +1,7 @@
 otorchmizer.optimizers.evolutionary
 ===================================
 
-Evolutionary optimizers are inspired by Darwinian evolution — selection, crossover, and mutation operators drive the search.
+Evolutionary optimizers are inspired by Darwinian evolution â€” selection, crossover, and mutation operators drive the search.
 
 .. toctree::
     otorchmizer.optimizers.evolutionary.bsa

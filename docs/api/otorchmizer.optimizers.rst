@@ -1,7 +1,9 @@
 otorchmizer.optimizers
 ======================
 
-This is why we are called Otorchmizer. This is the heart of heuristics, where you can find 91 meta-heuristic optimization techniques across 7 families — all running on PyTorch tensors with GPU support.
+The optimizer families expose 91 meta-heuristic classes backed by tensor populations.
+Some implementations retain per-agent loops. Device and dtype compatibility depend
+on the selected algorithm and objective.
 
 .. toctree::
     otorchmizer.optimizers.boolean

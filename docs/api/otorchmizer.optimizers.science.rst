@@ -1,7 +1,7 @@
 otorchmizer.optimizers.science
 ==============================
 
-Science-inspired optimizers draw from physics, chemistry, and astronomy — gravitational search, simulated annealing, equilibrium dynamics, and more.
+Science-inspired optimizers draw from physics, chemistry, and astronomy â€” gravitational search, simulated annealing, equilibrium dynamics, and more.
 
 .. toctree::
     otorchmizer.optimizers.science.aso

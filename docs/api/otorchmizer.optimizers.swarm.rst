@@ -1,7 +1,7 @@
 otorchmizer.optimizers.swarm
 ============================
 
-This is the heart of swarm intelligence. Algorithms inspired by the collective behavior of decentralized, self-organized systems — particle swarms, whale pods, firefly flashes, and more.
+This is the heart of swarm intelligence. Algorithms inspired by the collective behavior of decentralized, self-organized systems â€” particle swarms, whale pods, firefly flashes, and more.
 
 .. toctree::
     otorchmizer.optimizers.swarm.abc

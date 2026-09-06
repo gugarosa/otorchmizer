@@ -1,4 +1,7 @@
-from otorchmizer.optimizers.science import SA, GSA, EO
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
+from otorchmizer.optimizers.science import EO, GSA, SA
 
 # Simulated Annealing
 sa = SA(params={"T": 100.0, "beta": 0.999})

@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "otorchmizer"
-version = "1.0.0"
+version = "1.0.1"
 description = "A PyTorch-based library for nature-inspired meta-heuristic optimization"
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
     {name = "Gustavo Rosa", email = "gustavo.rosa@unesp.br"},
@@ -18,7 +19,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Education",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
     "torch>=2.0.0",
     "matplotlib>=3.5.0",
+    "numpy>=1.23",
     "networkx>=2.8",
     "tqdm>=4.60.0",
     "dill>=0.3.6",
@@ -47,13 +48,24 @@ dev = [
     "pre-commit>=3.0",
     "ruff>=0.1.0",
 ]
+docs = [
+    "sphinx>=5.0",
+    "sphinx-rtd-theme>=1.0",
+]
+benchmarks = ["opytimizer==3.1.4"]
+
+[tool.setuptools.packages.find]
+include = ["otorchmizer*"]
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "UP", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["otorchmizer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

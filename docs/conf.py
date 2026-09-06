@@ -1,30 +1,23 @@
-# -*- coding: utf-8 -*-
-#
-# Configuration file for the Sphinx documentation builder.
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
 
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath(".."))
-
-import otorchmizer
-
-# -- Project information -----------------------------------------------------
+from importlib.metadata import version as package_version
 
 project = "otorchmizer"
-copyright = "2026, Gustavo de Rosa"
+copyright = "2021-2026, Gustavo de Rosa"
 author = "Gustavo de Rosa"
 
-version = otorchmizer.__version__
-release = otorchmizer.__version__
-
-# -- General configuration ---------------------------------------------------
+release = package_version("otorchmizer")
+version = release
 
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
 ]
+napoleon_numpy_docstring = False
+autoclass_content = "both"
+autodoc_typehints = "none"
 
 templates_path = ["_templates"]
 source_suffix = ".rst"
@@ -33,21 +26,14 @@ language = "en"
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 pygments_style = None
 
-# -- Options for HTML output -------------------------------------------------
-
 html_theme = "sphinx_rtd_theme"
 
 html_theme_options = {
     "collapse_navigation": False,
-    "display_version": True,
     "logo_only": True,
 }
 
-# -- Options for HTMLHelp output ---------------------------------------------
-
 htmlhelp_basename = "otorchmizer_doc"
-
-# -- Options for LaTeX output ------------------------------------------------
 
 latex_elements = {}
 
@@ -61,11 +47,7 @@ latex_documents = [
     ),
 ]
 
-# -- Options for manual page output ------------------------------------------
-
 man_pages = [(master_doc, "otorchmizer", "Otorchmizer Documentation", [author], 1)]
-
-# -- Options for Texinfo output ----------------------------------------------
 
 texinfo_documents = [
     (
@@ -79,12 +61,8 @@ texinfo_documents = [
     ),
 ]
 
-# -- Options for Epub output -------------------------------------------------
-
 epub_title = project
 epub_exclude_files = ["search.html"]
-
-# -- Extension configuration -------------------------------------------------
 
 autodoc_default_options = {"exclude-members": "__weakref__"}
 autodoc_member_order = "bysource"

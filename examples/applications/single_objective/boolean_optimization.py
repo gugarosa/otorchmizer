@@ -1,3 +1,6 @@
+# Copyright (c) 2021-2026 Gustavo de Rosa.
+# Licensed under the Apache License, Version 2.0.
+
 import torch
 
 from otorchmizer import Otorchmizer
@@ -10,7 +13,17 @@ torch.manual_seed(0)
 
 # Simple binary fitness function — count number of 1s
 def count_ones(x):
-    return -x.sum()  # Minimize negative count = maximize count of 1s
+    """Turn binary-weight maximization into a minimization objective.
+
+    Args:
+        x: Binary candidate position tensor.
+
+    Returns:
+        Negative count of set bits.
+
+    """
+
+    return -x.sum()
 
 
 # Number of agents and decision variables
@@ -22,8 +35,9 @@ lower_bound = [0] * n_variables
 upper_bound = [1] * n_variables
 
 # Creates the space, optimizer and function
-space = Space(n_agents=n_agents, n_variables=n_variables,
-              lower_bound=lower_bound, upper_bound=upper_bound, device="cpu")
+space = Space(
+    n_agents=n_agents, n_variables=n_variables, lower_bound=lower_bound, upper_bound=upper_bound, device="cpu"
+)
 
 # Initialize with binary positions
 space.population.initialize_binary()
